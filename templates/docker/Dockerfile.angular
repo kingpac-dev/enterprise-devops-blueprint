@@ -1,0 +1,94 @@
+# syntax=docker/dockerfile:1
+#
+# Angular application — multi-stage build, non-root runtime.
+#
+# Implements: docs/06-container/dockerfile-standard.md
+#             docs/06-container/docker-standard.md
+#
+# Copy to your repository as `Dockerfile` and adjust the marked values.
+#
+# TBD before use:
+#   - Node version, and whether it is pinned by digest
+#   - nginx-unprivileged version, and whether it is pinned by digest
+#   - APP_NAME must match the project name in angular.json
+#
+# Runtime configuration: this image is built ONCE and promoted to DEV, UAT,
+# and PROD unchanged. Environment values are written to assets/config.json at
+# container start by docker-entrypoint.d/10-runtime-config.sh, and read by the
+# application at bootstrap. Nothing environment-specific is compiled in.
+
+
+# --------------------------------------------------------------------------
+# Build stage
+# --------------------------------------------------------------------------
+FROM node:22.11-alpine AS build
+
+WORKDIR /src
+
+# Dependency manifests first, so a source change does not invalidate the
+# restore layer. `npm ci` installs the lockfile exactly and fails if the
+# lockfile and package.json disagree — `npm install` may resolve differently.
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+# ADJUST: must match the project name in angular.json
+ARG APP_NAME=my-app
+RUN npm run build -- --configuration=production
+
+# Angular 17+ emits to dist/<app>/browser. Normalise the path so the runtime
+# stage does not need to know the Angular version.
+RUN if [ -d "dist/${APP_NAME}/browser" ]; then \
+        mv "dist/${APP_NAME}/browser" /publish; \
+    else \
+        mv "dist/${APP_NAME}" /publish; \
+    fi
+
+
+# --------------------------------------------------------------------------
+# Runtime stage
+# --------------------------------------------------------------------------
+# nginx-unprivileged runs as uid 101 and listens on 8080 by default, which
+# satisfies the non-root and above-1024 requirements without further work.
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS final
+
+# Build metadata, supplied by the pipeline. These are NOT secrets — never put
+# a credential in ARG, it is readable in image history.
+ARG VERSION=0.0.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIMESTAMP=unknown
+ARG REPOSITORY_URL=unknown
+
+LABEL org.opencontainers.image.title="angular-app" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_TIMESTAMP}" \
+      org.opencontainers.image.source="${REPOSITORY_URL}" \
+      org.opencontainers.image.vendor="TBD"
+
+COPY nginx.angular.conf /etc/nginx/conf.d/default.conf
+
+# The runtime-config script writes into the html directory at start, so the
+# directory must be writable by the runtime user.
+COPY --from=build --chown=101:101 /publish /usr/share/nginx/html
+COPY --chown=101:101 runtime-config.angular.sh /docker-entrypoint.d/10-runtime-config.sh
+
+# The base image's entrypoint runs only files in /docker-entrypoint.d that
+# are EXECUTABLE, and skips the rest with a log line that is easy to miss.
+# A build context created on Windows carries no executable bit, so without
+# this the runtime configuration is silently never written — and the
+# application starts against a missing config.json.
+RUN chmod +x /docker-entrypoint.d/10-runtime-config.sh
+
+USER 101
+
+EXPOSE 8080
+
+# Static content served by nginx: a health check is technically appropriate.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1
+
+# The base image's entrypoint runs /docker-entrypoint.d/*.sh and then execs
+# nginx, so signals reach nginx directly. Do not override it.
+CMD ["nginx", "-g", "daemon off;"]

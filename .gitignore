@@ -1,0 +1,76 @@
+# Enterprise DevOps Blueprint — repository ignore rules
+#
+# This repository holds documentation and templates. Nothing generated,
+# environment-specific, or credential-bearing belongs in Git.
+
+# ---------------------------------------------------------------------------
+# Secrets and environment files
+# ---------------------------------------------------------------------------
+# Only *.env.example files with placeholder values are allowed.
+.env
+.env.*
+*.env
+!*.env.example
+!.env.example
+
+secrets/
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.crt
+*.cer
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*credentials*.json
+*credentials*.xml
+.npmrc
+.docker/config.json
+
+# ---------------------------------------------------------------------------
+# Build and tooling output
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+build/
+out/
+bin/
+obj/
+coverage/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Scanner and pipeline artifacts
+# ---------------------------------------------------------------------------
+.scannerwork/
+trivy-report.*
+sbom.*
+*.sarif
+TestResults/
+
+# ---------------------------------------------------------------------------
+# Editor and OS
+# ---------------------------------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+# VS Code Local History extension: timestamped copies of edited files.
+# Committing these duplicates every document under a second set of paths.
+.history/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Local scratch
+# ---------------------------------------------------------------------------
+tmp/
+temp/
+*.local
+*.log

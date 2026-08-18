@@ -1,0 +1,107 @@
+# syntax=docker/dockerfile:1
+#
+# .NET Worker Service — multi-stage build, non-root runtime, no HTTP surface.
+#
+# Implements: docs/06-container/dockerfile-standard.md
+#             docs/06-container/docker-standard.md
+#             docs/08-observability/observability-standard.md
+#
+# Copy to your repository as `Dockerfile` and adjust the marked values.
+#
+# TBD before use:
+#   - .NET version, and whether images are pinned by digest
+#   - Whether metrics are exposed by a listener or pushed (see below)
+
+
+# --------------------------------------------------------------------------
+# Build stage
+# --------------------------------------------------------------------------
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+WORKDIR /src
+
+# ADJUST: paths to your project
+ARG PROJECT_PATH=src/MyWorker/MyWorker.csproj
+
+COPY ["src/MyWorker/MyWorker.csproj", "src/MyWorker/"]
+COPY ["src/MyWorker/packages.lock.json", "src/MyWorker/"]
+RUN dotnet restore "${PROJECT_PATH}" --locked-mode
+
+COPY . .
+RUN dotnet publish "${PROJECT_PATH}" \
+        --configuration Release \
+        --no-restore \
+        --output /app/publish
+
+
+# --------------------------------------------------------------------------
+# Runtime stage
+# --------------------------------------------------------------------------
+# The .NET runtime image, NOT aspnet. A worker with no HTTP surface does not
+# need the ASP.NET stack, and including it adds attack surface for nothing.
+FROM mcr.microsoft.com/dotnet/runtime:8.0 AS final
+
+ARG VERSION=0.0.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIMESTAMP=unknown
+ARG REPOSITORY_URL=unknown
+
+LABEL org.opencontainers.image.title="dotnet-worker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_TIMESTAMP}" \
+      org.opencontainers.image.source="${REPOSITORY_URL}" \
+      org.opencontainers.image.vendor="TBD"
+
+RUN groupadd --system --gid 1001 appgroup \
+ && useradd  --system --uid 1001 --gid appgroup --no-create-home appuser
+
+WORKDIR /app
+COPY --from=build --chown=1001:1001 /app/publish .
+
+# Liveness is signalled by touching a file after each successful processing
+# cycle. This avoids adding a network listener purely to answer a health
+# check, and it detects the failure that matters for a worker: processing has
+# stopped while the process is still running.
+#
+# The application must touch ${WORKER_LIVENESS_FILE} at the end of each cycle.
+RUN mkdir -p /var/run/worker && chown 1001:1001 /var/run/worker
+
+USER 1001
+
+ENV DOTNET_RUNNING_IN_CONTAINER=true \
+    WORKER_LIVENESS_FILE=/var/run/worker/alive \
+    WORKER_LIVENESS_MAX_AGE_SECONDS=120
+
+# Fails when the liveness file has not been touched recently — a stalled
+# worker, which process liveness alone would not detect.
+#
+# ADJUST: WORKER_LIVENESS_MAX_AGE_SECONDS must exceed your longest normal
+# processing cycle, or a healthy worker will be restarted mid-work.
+# Written with `test` rather than `[ ... ]`: a CMD argument beginning with
+# `[` is parsed as JSON exec form first, and falls back to shell form only
+# after that parse fails. Starting with `test` removes the ambiguity.
+HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=2 \
+    CMD test -f "$WORKER_LIVENESS_FILE" \
+        && test $(( $(date +%s) - $(stat -c %Y "$WORKER_LIVENESS_FILE") )) -lt "$WORKER_LIVENESS_MAX_AGE_SECONDS" \
+        || exit 1
+
+# No EXPOSE. A worker with no HTTP surface publishes no port.
+#
+# Metrics remain an open question: Prometheus scrapes, so exposing metrics
+# requires a listener — which is a network surface, though for metrics rather
+# than for a health check. The alternative is a push gateway.
+# `TBD` in docs/08-observability/monitoring-standard.md.
+#
+# If a metrics listener is adopted, uncomment and bind it to a distinct port
+# so it can be network-restricted independently of anything else:
+# ENV METRICS_PORT=9090
+# EXPOSE 9090
+
+# Exec form, so SIGTERM reaches the application. The worker must stop
+# accepting work, finish or safely abandon what is in flight, flush, and exit
+# within the container stop timeout — a worker killed mid-transaction can
+# leave partial writes or unacknowledged messages.
+#
+# ADJUST: your assembly name
+ENTRYPOINT ["dotnet", "MyWorker.dll"]

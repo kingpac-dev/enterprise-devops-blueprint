@@ -1,0 +1,128 @@
+# Prometheus scrape configuration — example.
+#
+# Implements: docs/08-observability/monitoring-standard.md
+#
+# ADJUST every host, port, and label. Do not commit real internal hostnames
+# or addresses to a repository — see SECURITY.md.
+
+global:
+  # TBD. Shorter detects faster and costs proportionally more storage.
+  # 15-30s is a common starting range.
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+
+  # Attached to every metric and every alert. Identifies which Prometheus
+  # produced a series when more than one exists.
+  external_labels:
+    monitor: platform
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            # TBD — alert destination. See docs/08-observability/alerting-standard.md
+            - alertmanager.example.internal:9093
+
+scrape_configs:
+
+  # ---------------------------------------------------------------------
+  # Application services
+  # ---------------------------------------------------------------------
+  # `environment` and `service` are set here rather than by the application,
+  # so every service carries them consistently. They are the labels every
+  # dashboard and alert rule filters on.
+  - job_name: app-prod
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - orders-api.prod.example.internal:8080
+        labels:
+          environment: prod
+          service: orders-api
+      - targets:
+          - orders-web.prod.example.internal:8080
+        labels:
+          environment: prod
+          service: orders-web
+
+  - job_name: app-uat
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - orders-api.uat.example.internal:8080
+        labels:
+          environment: uat
+          service: orders-api
+
+  # ---------------------------------------------------------------------
+  # Container metrics
+  # ---------------------------------------------------------------------
+  # Provides restart count, CPU throttling, and memory against limit —
+  # signals the application cannot report about itself, because a container
+  # killed for exceeding its memory limit logs nothing.
+  - job_name: containers
+    static_configs:
+      - targets:
+          - prod-host-1.example.internal:8081
+        labels:
+          environment: prod
+
+  # ---------------------------------------------------------------------
+  # Host metrics
+  # ---------------------------------------------------------------------
+  # Disk usage is not optional. A full disk stops every container on the
+  # host — see docs/06-container/docker-compose-standard.md
+  - job_name: hosts
+    static_configs:
+      - targets:
+          - prod-host-1.example.internal:9100
+        labels:
+          environment: prod
+
+  # ---------------------------------------------------------------------
+  # Platform components
+  # ---------------------------------------------------------------------
+  # Easy to omit, because the platform is what does the monitoring.
+  # Harbor unavailable stops deployment AND rollback; that must alert.
+  - job_name: platform
+    static_configs:
+      - targets:
+          - jenkins.example.internal:8080
+        labels:
+          component: jenkins
+      - targets:
+          - harbor.example.internal:9090
+        labels:
+          component: harbor
+
+  # ---------------------------------------------------------------------
+  # Prometheus itself
+  # ---------------------------------------------------------------------
+  # Necessary and NOT sufficient. A Prometheus that has stopped cannot
+  # report that it has stopped. Something outside this instance must watch
+  # for the heartbeat's absence — see alert-rules.example.yml.
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+# ---------------------------------------------------------------------
+# Cardinality
+# ---------------------------------------------------------------------
+# Every distinct combination of label values creates a time series, and
+# series count is the primary driver of memory and storage use.
+#
+# NEVER label with: user identifiers, request or correlation identifiers,
+# session identifiers, full URLs with parameters, email addresses, IP
+# addresses, or any value derived from user input — a label whose values
+# come from user input is a label an outsider controls the cardinality of.
+#
+# Route labels use the template (/api/orders/{id}), never the resolved path
+# (/api/orders/84213). The second is the most common way a Prometheus
+# instance is destroyed by a well-intentioned change.
+#
+# TBD — a series-count limit, and whether it is enforced.

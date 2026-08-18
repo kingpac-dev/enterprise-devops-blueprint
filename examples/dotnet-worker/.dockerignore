@@ -1,0 +1,19 @@
+# Adapted from templates/docker/.dockerignore.dotnet
+.env
+.env.*
+*.pem
+*.key
+*.user
+.git
+.gitignore
+**/bin
+**/obj
+**/TestResults
+**/coverage
+*.trx
+.vs
+.vscode
+.idea
+Dockerfile*
+.dockerignore
+README.md

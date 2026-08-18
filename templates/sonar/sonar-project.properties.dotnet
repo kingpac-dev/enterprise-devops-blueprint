@@ -1,0 +1,57 @@
+# SonarQube configuration — .NET API or Worker.
+#
+# Copy to your repository root as `sonar-project.properties`.
+# Implements: docs/05-ci-cd/ and templates/sonar/quality-gate-baseline.md
+#
+# NOTE: for .NET, most settings are normally passed to `dotnet sonarscanner
+# begin` rather than read from this file. This file documents the intended
+# values; the pipeline passes them as arguments. Keep the two in step, or
+# delete this file and keep only the pipeline arguments — two sources of
+# truth that disagree is worse than one.
+#
+# The analysis token is supplied by Jenkins Credentials at run time and must
+# NEVER appear here.
+
+# --- Project identity -----------------------------------------------------
+# ADJUST. Must match the repository, Harbor project, and service label.
+sonar.projectKey=orders-api
+sonar.projectName=Orders API
+
+# --- Sources and tests ----------------------------------------------------
+sonar.sources=src
+sonar.tests=tests
+sonar.sourceEncoding=UTF-8
+
+# Build output carries no analysable source.
+sonar.exclusions=**/bin/**,**/obj/**,**/Migrations/**
+
+# --- Coverage -------------------------------------------------------------
+# Produced by: dotnet test --collect:"XPlat Code Coverage" with coverlet,
+# then converted to OpenCover format. The path must match what the build
+# actually writes.
+sonar.cs.opencover.reportsPaths=**/coverage.opencover.xml
+sonar.cs.vstest.reportsPaths=**/*.trx
+
+# EF Core migrations are generated, are not hand-maintained, and their
+# coverage is meaningless. Excluded from coverage but NOT from analysis —
+# a migration can still contain a defect worth flagging.
+sonar.coverage.exclusions=**/Migrations/**,**/Program.cs,**/*Startup.cs
+
+# --- Analysis scope -------------------------------------------------------
+# TBD: whether the gate evaluates new code only, which depends on the
+# SonarQube edition. See ADR-0003.
+
+# --- Pipeline invocation (reference) --------------------------------------
+# dotnet sonarscanner begin \
+#   /k:"orders-api" \
+#   /v:"${VERSION}" \
+#   /d:sonar.host.url="${SONAR_HOST_URL}" \
+#   /d:sonar.token="${SONAR_TOKEN}" \
+#   /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
+# dotnet build --no-incremental
+# dotnet test --collect:"XPlat Code Coverage"
+# dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
+#
+# SONAR_TOKEN comes from Jenkins Credentials. Do not echo it, and do not
+# run these commands under `set -x` — the token would land in the build log,
+# which is widely readable and long-lived.

@@ -1,0 +1,53 @@
+# SonarQube configuration — Angular application.
+#
+# Copy to your repository root as `sonar-project.properties`.
+# Implements: docs/05-ci-cd/ and templates/sonar/quality-gate-baseline.md
+#
+# The analysis token is supplied by Jenkins Credentials at run time. It must
+# NEVER appear in this file, in the repository, or in a build log.
+
+# --- Project identity -----------------------------------------------------
+# ADJUST. The key must match the repository, Harbor project, and service
+# label used in metrics and logs. Every inconsistency becomes a translation
+# step performed by a person under time pressure.
+sonar.projectKey=orders-web
+sonar.projectName=Orders Web
+
+# Supplied by the pipeline so the analysis is attributable to a build.
+# sonar.projectVersion=${VERSION}
+
+# --- Sources and tests ----------------------------------------------------
+# Separated deliberately: without this, test code is measured as production
+# code, which inflates volume and distorts every ratio the gate evaluates.
+sonar.sources=src
+sonar.tests=src
+sonar.test.inclusions=**/*.spec.ts,**/*.test.ts
+sonar.exclusions=**/node_modules/**,**/dist/**,**/*.spec.ts,**/*.test.ts
+
+sonar.sourceEncoding=UTF-8
+
+# --- Coverage -------------------------------------------------------------
+# Path must match what the build actually produces. A wrong path reports
+# zero coverage, which looks like a coverage problem rather than a
+# configuration one.
+sonar.javascript.lcov.reportPaths=coverage/lcov.info
+sonar.typescript.lcov.reportPaths=coverage/lcov.info
+
+# Generated and vendored code carries no useful coverage signal.
+sonar.coverage.exclusions=**/*.spec.ts,**/*.test.ts,**/environments/**,**/*.module.ts,**/main.ts,**/polyfills.ts
+
+# --- Exclusions -----------------------------------------------------------
+# Every exclusion below hides code from the gate. Each needs a reason, and
+# an exclusion that hides real application code defeats the gate entirely.
+#
+# ADJUST, and record why:
+#   - generated API clients: regenerated from a schema, not hand-maintained
+# sonar.issue.ignore.multicriteria=e1
+# sonar.issue.ignore.multicriteria.e1.ruleKey=*
+# sonar.issue.ignore.multicriteria.e1.resourceKey=**/api/generated/**
+
+# --- Analysis scope -------------------------------------------------------
+# TBD: whether the gate evaluates new code only. This depends on the
+# SonarQube edition — the Community edition does not provide branch or
+# pull-request analysis, which changes what the gate actually measures.
+# See ADR-0003.

@@ -1,0 +1,136 @@
+# Production deployment — strictest settings.
+#
+# Implements: docs/06-container/docker-compose-standard.md
+#
+# Copy to deployment/prod/compose.yml and adjust the marked values.
+#
+# Values come from a .env file held OUTSIDE Git, readable only by the account
+# that runs the deployment. Only .env.example belongs in the repository.
+#
+# Required values use ${VAR:?message}: the deployment fails immediately when
+# one is missing, rather than starting with a default that might point at the
+# wrong environment.
+
+name: myapp-prod
+
+services:
+
+  web:
+    # Explicit immutable tag from Harbor. Never `latest`, never `build:`.
+    # A `build:` directive here would make the host build its own image —
+    # a different artifact from the one UAT verified.
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/web:${WEB_VERSION:?WEB_VERSION is required}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      API_BASE_URL: ${WEB_API_BASE_URL:?WEB_API_BASE_URL is required}
+      ENVIRONMENT: prod
+      LOG_LEVEL: warn
+    ports:
+      # Bound to loopback and reached through a reverse proxy. Binding to
+      # 0.0.0.0 — the default when no address is given — publishes the port
+      # on every host interface, and Docker's packet-filter rules commonly
+      # take effect before the host firewall's.
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    networks:
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+    logging:
+      # The default json-file driver has NO size limit. A service logging
+      # steadily fills the host disk, which stops every container on the
+      # host — not only this one.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/api:${API_VERSION:?API_VERSION is required}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "8080"
+      # Connection strings and keys come from .env, never from this file.
+      ConnectionStrings__Default: ${DB_CONNECTION_STRING:?DB_CONNECTION_STRING is required}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
+      Serilog__MinimumLevel__Default: Information
+    networks:
+      - frontend
+      - backend
+    volumes:
+      # .NET Data Protection keys must persist. Without this, every
+      # deployment invalidates antiforgery tokens and encrypted cookies,
+      # and users are logged out on each release.
+      #
+      # Every named volume is a backup obligation — see
+      # docs/11-disaster-recovery/backup-standard.md
+      - api-dataprotection:/home/appuser/.aspnet/DataProtection-Keys
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 45s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/worker:${WORKER_VERSION:?WORKER_VERSION is required}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__Default: ${DB_CONNECTION_STRING:?DB_CONNECTION_STRING is required}
+      WORKER_LIVENESS_FILE: /var/run/worker/alive
+      WORKER_LIVENESS_MAX_AGE_SECONDS: "120"
+    networks:
+      # Backend only. A worker with no inbound HTTP surface has no reason to
+      # be on the frontend network.
+      - backend
+    stop_grace_period: 120s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    # No route out. A component that cannot reach the internet cannot
+    # exfiltrate to it. One line, and it removes a class of exposure.
+    internal: true
+
+volumes:
+  api-dataprotection:

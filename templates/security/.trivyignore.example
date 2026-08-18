@@ -1,0 +1,69 @@
+# Trivy ignore entries — EXAMPLE.
+#
+# Copy to your repository root as `.trivyignore`.
+# Implements: docs/07-security/vulnerability-management.md
+#             docs/10-governance/exception-management.md
+#
+# ---------------------------------------------------------------------------
+# EVERY ENTRY IN THIS FILE IS AN EXCEPTION TO A SECURITY CONTROL.
+#
+# It must record: the finding, why it does not apply, what compensates for
+# it meanwhile, who approved it, and when it expires.
+#
+# An entry without those is a permanent, invisible weakening of a control —
+# invisible precisely because it works.
+#
+# The file format has no concept of expiry. Nothing here enforces it. An
+# external check must compare the Expires dates against today and fail the
+# build, or these entries are permanent by construction.
+# `TBD` — whether that check exists.
+#
+# An expired exception is a CONTROL FAILURE, not a default extension.
+# ---------------------------------------------------------------------------
+
+
+# --- Example entry: not exploitable in this context ------------------------
+# CVE-0000-11111
+# Package:      example-lib 1.2.3
+# Severity:     HIGH
+# Finding:      Remote code execution via the XML parsing path
+# Justification: This application does not parse XML. The vulnerable code
+#               path is unreachable — verified by inspection on 2026-08-16.
+# Compensating: None required; the path is not invoked
+# Approved by:  Security owner (role)
+# Raised:       2026-08-16
+# Expires:      TBD
+# Remediation:  Upstream fix expected in 1.3.0; upgrade when released
+CVE-0000-11111
+
+
+# --- Example entry: no fix available yet -----------------------------------
+# CVE-0000-22222
+# Package:      base-os-package 2.4.1
+# Severity:     CRITICAL
+# Finding:      Privilege escalation
+# Justification: No fixed version exists. The container runs as a non-root
+#               user with no capabilities, which the exploit requires
+# Compensating: Non-root execution; read-only root filesystem
+# Approved by:  Security owner (role)
+# Raised:       2026-08-16
+# Expires:      TBD — short. Re-evaluate as soon as a fix ships
+# Remediation:  Rebuild on a patched base image
+CVE-0000-22222
+
+
+# ---------------------------------------------------------------------------
+# What must NEVER appear here
+# ---------------------------------------------------------------------------
+#
+#   - A bare CVE identifier with no surrounding record. Nobody can evaluate
+#     it later, including the person who added it
+#   - A wildcard or blanket suppression. Scope is per finding, per package
+#   - "Temporary, will fix later" without a date. That is how an exception
+#     becomes permanent
+#   - An entry added to unblock a release without an approver. That is a
+#     self-service bypass of a security control
+#
+# If this file is growing, the signal is not that the scanner is noisy. It is
+# that findings are being recorded rather than fixed — the metrics improve
+# while the exposure does not.

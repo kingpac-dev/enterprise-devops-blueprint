@@ -1,0 +1,225 @@
+# Prometheus alert rules — example.
+#
+# Implements: docs/08-observability/alerting-standard.md
+#
+# EVERY threshold below is TBD. They are shapes, not decisions.
+#
+# Every rule must satisfy: actionable, documented with a runbook link,
+# attributed to a service and environment, debounced with `for`, not
+# duplicated, and reviewed.
+#
+# Alerts are on SYMPTOMS — what users experience — not on causes. A service
+# at 85% CPU serving every request correctly is fine; alerting on it produces
+# noise, and noise trains people to dismiss the alert that mattered.
+#
+# The exceptions are conditions that will certainly cause failure but have
+# not yet, where the lead time is the point: disk filling, certificate expiry.
+
+groups:
+
+  # =======================================================================
+  # Recording rules — one definition of derived values
+  # =======================================================================
+  # Dashboards and alerts share these, so they cannot drift apart. Where an
+  # alert and a dashboard compute error rate differently, the dashboard will
+  # eventually disagree with the alert — and the disagreement is discovered
+  # while someone is deciding whether the alert is real.
+  - name: recording.rules
+    interval: 30s
+    rules:
+      - record: service:http_requests:rate5m
+        expr: sum by (service, environment) (rate(http_requests_total[5m]))
+
+      - record: service:http_errors:rate5m
+        expr: sum by (service, environment) (rate(http_requests_total{status=~"5.."}[5m]))
+
+      - record: service:http_error_ratio:rate5m
+        expr: |
+          service:http_errors:rate5m
+            /
+          clamp_min(service:http_requests:rate5m, 0.001)
+
+      - record: service:http_latency_p95:5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (service, environment, le) (rate(http_request_duration_seconds_bucket[5m]))
+          )
+
+  # =======================================================================
+  # Service availability and behaviour — symptom alerts
+  # =======================================================================
+  - name: service.alerts
+    rules:
+
+      - alert: ServiceUnavailable
+        expr: up{job=~"app-.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.service }} in {{ $labels.environment }} is not responding'
+          description: 'Prometheus has been unable to scrape {{ $labels.service }} for 2 minutes.'
+          runbook: 'TBD — docs/09-operations/'
+
+      - alert: ElevatedErrorRate
+        # TBD: 5% sustained. Set from a measured baseline, not from a
+        # general recommendation.
+        expr: service:http_error_ratio:rate5m > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.service }} error rate above 5% in {{ $labels.environment }}'
+          description: 'Error ratio {{ $value | humanizePercentage }} sustained for 5 minutes.'
+          runbook: 'TBD — docs/09-operations/'
+
+      - alert: HighLatency
+        # TBD: p95 above 1s. Set per service class.
+        expr: service:http_latency_p95:5m > 1
+        for: 10m
+        labels:
+          severity: high
+        annotations:
+          summary: '{{ $labels.service }} p95 latency above 1s in {{ $labels.environment }}'
+          runbook: 'TBD — docs/09-operations/'
+
+      - alert: ContainerRestartLoop
+        # A restarting container can look healthy on a coarse dashboard —
+        # it is running, after all — while serving almost nothing.
+        expr: increase(container_restarts_total[15m]) > 3
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: '{{ $labels.service }} restarting repeatedly in {{ $labels.environment }}'
+          runbook: 'TBD — docs/09-operations/container-troubleshooting-runbook.md'
+
+      - alert: WorkerStalled
+        # A worker with no HTTP surface: process liveness does not detect a
+        # worker that is running but stuck. Time since last successful cycle
+        # does.
+        expr: time() - worker_last_success_timestamp_seconds > 600
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: '{{ $labels.service }} has not completed a cycle in 10 minutes'
+          runbook: 'TBD — docs/09-operations/'
+
+  # =======================================================================
+  # Resource and lead-time alerts — cause alerts, justified by lead time
+  # =======================================================================
+  - name: resource.alerts
+    rules:
+
+      - alert: HostDiskFilling
+        # A full disk stops EVERY container on the host, and often the
+        # host's own ability to recover. Predictable, and preventable with
+        # warning — which is why this cause alert earns its place.
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) < 0.15
+        for: 15m
+        labels:
+          severity: high
+        annotations:
+          summary: 'Less than 15% disk free on {{ $labels.instance }} ({{ $labels.mountpoint }})'
+          description: 'Common causes: unrotated container logs, accumulated images.'
+          runbook: 'TBD — docs/09-operations/'
+
+      - alert: ContainerMemoryNearLimit
+        expr: |
+          (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.90
+        for: 15m
+        labels:
+          severity: high
+        annotations:
+          summary: '{{ $labels.service }} above 90% of its memory limit'
+          description: 'Without a limit the kernel would kill something else instead. With one, this container is next.'
+          runbook: 'TBD — docs/09-operations/'
+
+      - alert: CertificateExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 21
+        for: 1h
+        labels:
+          severity: high
+        annotations:
+          summary: 'Certificate for {{ $labels.instance }} expires in {{ $value | printf "%.0f" }} days'
+          runbook: 'TBD — docs/09-operations/certificate-renewal-runbook.md'
+
+  # =======================================================================
+  # Platform alerts
+  # =======================================================================
+  - name: platform.alerts
+    rules:
+
+      - alert: HarborUnavailable
+        # The most consequential platform failure: deployment AND rollback
+        # both stop, because both pull from Harbor. The recovery path shares
+        # a dependency with the failure path.
+        expr: up{component="harbor"} == 0
+        for: 2m
+        labels:
+          severity: high
+        annotations:
+          summary: 'Harbor is not responding — deployment and rollback are both blocked'
+          runbook: 'TBD — runbooks/harbor-restore.md'
+
+      - alert: JenkinsUnavailable
+        expr: up{component="jenkins"} == 0
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: 'Jenkins is not responding — delivery is stopped'
+          description: 'Production services continue running. This is a delivery outage, not a service outage.'
+          runbook: 'TBD — runbooks/jenkins-backup-and-restore.md'
+
+  # =======================================================================
+  # Monitoring the monitoring
+  # =======================================================================
+  # A broken alerting path produces exactly the same signal as a healthy
+  # platform: silence.
+  - name: meta.alerts
+    rules:
+
+      - alert: PrometheusTargetsMissing
+        expr: up == 0
+        for: 10m
+        labels:
+          severity: high
+        annotations:
+          summary: 'Prometheus cannot scrape {{ $labels.instance }} ({{ $labels.job }})'
+          description: 'A metrics gap is itself a signal. Alerts depending on this target will not fire.'
+          runbook: 'TBD'
+
+      - alert: PrometheusRuleEvaluationFailing
+        expr: increase(prometheus_rule_evaluation_failures_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: 'Prometheus rule evaluation is failing — some alerts are not being evaluated'
+          runbook: 'TBD'
+
+      # ---------------------------------------------------------------
+      # HEARTBEAT — the most important rule in this file
+      # ---------------------------------------------------------------
+      # Always fires. An external watcher expects the notification on a
+      # schedule; its ABSENCE is the alarm.
+      #
+      # The watcher must be OUTSIDE this stack. A heartbeat evaluated by
+      # Prometheus and delivered through this alerting path proves nothing
+      # when the failure is Prometheus or that path.
+      #
+      # TBD — the external watcher. Without it, detection failure is
+      # undetectable. See docs/08-observability/alerting-standard.md
+      - alert: Heartbeat
+        expr: vector(1)
+        labels:
+          severity: heartbeat
+        annotations:
+          summary: 'Alerting path is alive'
+          description: 'Routed to an external watcher that alerts on its absence, not its presence. Nobody acts when this fires; the runbook below is for when it STOPS arriving.'
+          runbook: 'TBD — runbooks/observability-stack-recovery.md'

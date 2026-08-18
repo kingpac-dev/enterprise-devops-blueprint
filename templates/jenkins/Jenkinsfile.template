@@ -1,0 +1,423 @@
+// =========================================================================
+// Jenkinsfile — generic baseline.
+//
+// Implements: docs/05-ci-cd/ (planned), docs/06-container/image-versioning.md,
+//             docs/07-security/vulnerability-management.md
+//
+// This is the reference pipeline. The per-application-type files differ only
+// in the Restore / Lint / Build / Test / Analysis stages.
+//
+// DELIBERATELY STANDALONE. A Jenkins Shared Library would remove the
+// duplication between the four templates, and it is Phase 5 work — a library
+// written before several services have run through this pipeline encodes
+// patterns that were predicted rather than used. The stages marked
+// [LIBRARY CANDIDATE] are the ones to factor out when that time comes.
+//
+// STAGES BLOCKED BY ADR-0009: Deploy, Health verification, and Rollback
+// cannot be written until the deployment mechanism is decided. They are
+// present as explicit stubs so their position in the flow is fixed and the
+// gap is visible, rather than absent and forgotten.
+// =========================================================================
+
+pipeline {
+
+    // TBD — agent labels, and whether agents are ephemeral. Ephemeral agents
+    // mean a compromised build does not persist to the next one; a persistent
+    // agent compromised once affects every subsequent build on it, including
+    // builds for unrelated applications.
+    agent { label 'linux-docker' }
+
+    options {
+        timestamps()
+        // A pipeline that can run twice concurrently for the same branch can
+        // publish two images for one commit and deploy them in either order.
+        disableConcurrentBuilds()
+        timeout(time: 45, unit: 'MINUTES')
+        // Build logs are audit evidence: gate verdicts, what was published,
+        // by whom. TBD — retention must match the evidence retention period
+        // in docs/10-governance/audit-evidence.md, not a convenient default.
+        buildDiscarder(logRotator(numToKeepStr: '50', artifactNumToKeepStr: '50'))
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        // ADJUST. Must match the repository, SonarQube project key, Harbor
+        // project, and the service label in metrics and logs. Every
+        // inconsistency becomes a translation step performed by a person
+        // under time pressure.
+        APP_NAME     = 'my-app'
+        HARBOR_URL   = 'harbor.example.internal'          // TBD
+        HARBOR_PROJ  = 'my-team'                          // TBD
+        SONAR_HOST   = 'https://sonarqube.example.internal' // TBD
+
+        // Blocking severity. TBD — set from a measured baseline, not from a
+        // general recommendation. A threshold the codebase cannot meet blocks
+        // everything on day one and is removed within a week.
+        TRIVY_SEVERITY = 'HIGH,CRITICAL'
+    }
+
+    stages {
+
+        // -----------------------------------------------------------------
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git rev-parse --short=7 HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // [LIBRARY CANDIDATE]
+        // Establishes the artifact identity for this build. Everything
+        // downstream references it, and the deployment record will reference
+        // it forever — see docs/06-container/image-versioning.md
+        stage('Compute identity') {
+            steps {
+                script {
+                    def branch = env.BRANCH_NAME ?: 'unknown'
+
+                    if (branch == 'main' || branch.startsWith('release/')) {
+                        // TBD — where the version comes from. Options: a file
+                        // in the repository, the Git tag, or derived from
+                        // commit messages under a structured convention.
+                        env.VERSION  = readFile('VERSION').trim()
+                        env.IMAGE_TAG = "${env.VERSION}-${env.GIT_COMMIT_SHORT}"
+                        env.PROMOTABLE = 'true'
+                    } else if (branch == 'develop') {
+                        env.VERSION  = '0.0.0'
+                        env.IMAGE_TAG = "sha-${env.GIT_COMMIT_SHORT}"
+                        env.PROMOTABLE = 'true'
+                    } else {
+                        // Feature branches verify; they do not publish.
+                        // A commit on a feature branch may never exist in
+                        // that form on develop — squash merging guarantees
+                        // it will not — so an image tagged with it would
+                        // reference a commit absent from the branch history
+                        // it claims to come from.
+                        env.VERSION  = '0.0.0'
+                        env.IMAGE_TAG = "unpublished-${env.GIT_COMMIT_SHORT}"
+                        env.PROMOTABLE = 'false'
+                    }
+
+                    env.IMAGE_REF = "${env.HARBOR_URL}/${env.HARBOR_PROJ}/${env.APP_NAME}:${env.IMAGE_TAG}"
+                    env.BUILD_TIMESTAMP = sh(
+                        script: 'date -u +%Y-%m-%dT%H:%M:%SZ',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Identity: ${env.IMAGE_REF} (promotable: ${env.PROMOTABLE})"
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // ADJUST per application type — see the per-type templates.
+        stage('Restore dependencies') {
+            steps {
+                sh 'echo "ADJUST: dependency restore from the committed lockfile"'
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                sh 'echo "ADJUST: lint"'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'echo "ADJUST: build"'
+            }
+        }
+
+        stage('Unit test and coverage') {
+            steps {
+                sh 'echo "ADJUST: test with coverage output"'
+            }
+            post {
+                always {
+                    // TBD — the test report path per application type.
+                    echo 'ADJUST: publish test results'
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        stage('Static analysis') {
+            steps {
+                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                    // `set +x` matters: Jenkins runs sh steps with -x by
+                    // default in many configurations, which echoes each
+                    // command — including the token — into a build log that
+                    // is widely readable and long-lived.
+                    sh '''
+                        set +x
+                        set -eu
+                        echo "ADJUST: submit analysis to SonarQube"
+                    '''
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // [LIBRARY CANDIDATE]
+        // Fails closed. An unavailable SonarQube means the gate has not been
+        // evaluated, and an unevaluated gate is not a pass — treating it as
+        // one converts a tool outage into a silent bypass of a mandatory
+        // control. waitForQualityGate throws rather than returning on
+        // failure to reach the server, which is the behaviour we want.
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // [LIBRARY CANDIDATE]
+        // Before the image is built: dependencies and any secret in the tree.
+        //
+        // A detected secret is NOT a finding to triage against a severity
+        // threshold. It is a credential to treat as compromised — rotate
+        // first. See templates/security/secret-scanning.md
+        stage('Dependency and secret scan') {
+            steps {
+                sh '''
+                    set -eu
+                    trivy fs \
+                      --config trivy.yaml \
+                      --scanners vuln,secret,misconfig \
+                      --severity "${TRIVY_SEVERITY}" \
+                      --exit-code 1 \
+                      .
+                '''
+            }
+        }
+
+        // -----------------------------------------------------------------
+        stage('Docker build') {
+            steps {
+                sh '''
+                    set -eu
+                    docker build \
+                      --build-arg VERSION="${VERSION}" \
+                      --build-arg GIT_COMMIT="${GIT_COMMIT_SHORT}" \
+                      --build-arg BUILD_TIMESTAMP="${BUILD_TIMESTAMP}" \
+                      --build-arg REPOSITORY_URL="${GIT_URL}" \
+                      --tag "${IMAGE_REF}" \
+                      .
+                '''
+                // Note: every --build-arg above is build metadata, not a
+                // secret. ARG values are readable in image history by anyone
+                // who can pull the image. For a genuine build-time credential
+                // use BuildKit secrets — see the Dockerfile standard.
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // [LIBRARY CANDIDATE]
+        // After the image is built, BEFORE publication. Blocking here rather
+        // than before deployment is deliberate: an image that fails policy
+        // should never enter the registry, because once it exists it is
+        // deployable and only a configuration change stands between it and
+        // production.
+        stage('Container scan') {
+            steps {
+                sh '''
+                    set -eu
+                    trivy image \
+                      --config trivy.yaml \
+                      --severity "${TRIVY_SEVERITY}" \
+                      --exit-code 1 \
+                      "${IMAGE_REF}"
+
+                    trivy image \
+                      --config trivy.yaml \
+                      --format json \
+                      --output "trivy-${APP_NAME}-${IMAGE_TAG}.json" \
+                      "${IMAGE_REF}"
+                '''
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // [LIBRARY CANDIDATE]
+        stage('Generate SBOM') {
+            steps {
+                sh '''
+                    set -eu
+                    trivy image \
+                      --format cyclonedx \
+                      --output "sbom-${APP_NAME}-${IMAGE_TAG}.cdx.json" \
+                      "${IMAGE_REF}"
+                '''
+                // TBD — publish to a store whose retention is INDEPENDENT of
+                // image retention. Stored only as a build artifact, the
+                // inventory disappears with build retention, and the
+                // supply-chain question can be asked long after that.
+                // See docs/07-security/sbom-standard.md
+            }
+        }
+
+        // -----------------------------------------------------------------
+        stage('Sign image') {
+            when { expression { return false } }   // Phase 3 — not adopted
+            steps {
+                echo '''
+                    NOT ADOPTED. Roadmap Phase 3.
+
+                    Signing attests that an artifact came from the expected
+                    pipeline. It says nothing about whether that pipeline's
+                    inputs were controlled — signing an image built from
+                    unpinned dependencies on a credential-rich persistent
+                    agent produces a cryptographic guarantee about an
+                    uncontrolled process.
+
+                    Its value is realized only at VERIFICATION, and
+                    verification must not be performed by this pipeline: a
+                    compromised Jenkins would sign its own artifact and
+                    verify it successfully.
+
+                    See adr/0009 (verification point depends on the
+                    deployment mechanism) and
+                    docs/07-security/container-image-signing.md
+                '''
+            }
+        }
+
+        // -----------------------------------------------------------------
+        stage('Push to Harbor') {
+            when { environment name: 'PROMOTABLE', value: 'true' }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'harbor-push',
+                    usernameVariable: 'HARBOR_USER',
+                    passwordVariable: 'HARBOR_PASSWORD'
+                )]) {
+                    sh '''
+                        set +x
+                        set -eu
+                        echo "${HARBOR_PASSWORD}" | docker login "${HARBOR_URL}" \
+                            --username "${HARBOR_USER}" --password-stdin
+                        set -x
+                        docker push "${IMAGE_REF}"
+                        docker logout "${HARBOR_URL}"
+                    '''
+                }
+                script {
+                    // The digest, not only the tag. A tag is a pointer;
+                    // recording the digest makes the deployment record
+                    // independent of whether tag immutability is enforced.
+                    env.IMAGE_DIGEST = sh(
+                        script: 'docker inspect --format "{{index .RepoDigests 0}}" "${IMAGE_REF}"',
+                        returnStdout: true
+                    ).trim()
+                    echo "Published: ${env.IMAGE_DIGEST}"
+                }
+            }
+        }
+
+        // =================================================================
+        // BLOCKED BY ADR-0009 — deployment mechanism undecided
+        // =================================================================
+        // These stages are stubs so their position in the flow is fixed and
+        // the gap stays visible. Each option in ADR-0009 changes how they
+        // are implemented, and the direction of the connection is what
+        // determines the firewall design:
+        //
+        //   A  Jenkins agent on the host   — this pipeline runs the deploy
+        //                                    step ON the target agent
+        //   B  SSH over internal network   — sshagent / sshCommand from here
+        //   C  Pull-based agent            — this pipeline updates a desired
+        //                                    -state source; the host converges.
+        //                                    Deployment becomes asynchronous,
+        //                                    so health verification and the
+        //                                    rollback decision need an
+        //                                    explicit feedback path
+        //   D  Portainer API               — NOT RECOMMENDED. Dissolves the
+        //                                    governance boundary that says
+        //                                    Portainer is not a deployment path
+        // =================================================================
+
+        stage('Record known-good version') {
+            when { expression { return false } }   // BLOCKED — ADR-0009
+            steps {
+                echo '''
+                    BLOCKED — adr/0009.
+
+                    Must run BEFORE deployment. Determining the rollback
+                    target afterwards, from a system that may already be
+                    failing, is how rollbacks get stuck.
+
+                    Must also verify the recorded image still EXISTS in
+                    Harbor. Retention that evicted it means the rollback
+                    fails at the moment it is needed, having appeared
+                    configured and correct until then.
+                '''
+            }
+        }
+
+        stage('Deploy DEV') {
+            when { expression { return false } }   // BLOCKED — ADR-0009
+            steps {
+                echo 'BLOCKED — adr/0009. Deploy the published image; do not rebuild.'
+            }
+        }
+
+        stage('Health verification') {
+            when { expression { return false } }   // BLOCKED — ADR-0009
+            steps {
+                echo '''
+                    BLOCKED — adr/0009.
+
+                    Poll the readiness endpoint until healthy or timeout.
+                    Readiness, not liveness: liveness answers a question
+                    about the process, readiness answers whether it can
+                    serve traffic.
+
+                    On failure: restore the recorded known-good version,
+                    verify recovery, record failure evidence, notify.
+
+                    "Where technically safe" does real work here. A release
+                    containing an irreversible migration cannot be rolled
+                    back by redeploying the previous image — the old code
+                    fails against the new schema. That limitation must have
+                    been recorded before approval, not discovered now.
+                '''
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-*.json, sbom-*.json',
+                             allowEmptyArchive: true,
+                             fingerprint: true
+            // Clean the workspace so artifacts do not leak between builds.
+            cleanWs()
+        }
+        success {
+            script {
+                if (env.PROMOTABLE == 'true') {
+                    echo "Published ${env.IMAGE_REF} (${env.IMAGE_DIGEST ?: 'digest unavailable'})"
+                    // TBD — write the deployment record. Without it, no
+                    // end-to-end question is answerable: what is running,
+                    // from which commit, approved by whom.
+                    // See docs/10-governance/audit-evidence.md
+                }
+            }
+        }
+        failure {
+            // TBD — notification. A failure nobody is told about is a
+            // failure discovered later, by its consequences.
+            echo "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+        }
+    }
+}

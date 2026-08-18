@@ -1,0 +1,78 @@
+# Trivy configuration.
+#
+# Copy to your repository root as `trivy.yaml`.
+# Implements: docs/07-security/vulnerability-management.md
+#
+# VERIFY key names against your installed Trivy version before adopting.
+# Trivy's configuration schema has changed between major versions, and an
+# unrecognised key is silently ignored — producing a scan that runs with
+# defaults while appearing to be configured.
+
+# Scans can be slow on large images. Too short a timeout produces a failure
+# indistinguishable from a finding.
+timeout: 10m
+
+# --- What blocks ----------------------------------------------------------
+# TBD: confirm the blocking severities. These are a starting proposal.
+severity:
+  - HIGH
+  - CRITICAL
+
+# Non-zero exit on a finding at or above `severity`, so the pipeline stops.
+# A scanner that reports without failing is a report, not a gate.
+exit-code: 1
+
+# --- Scanners -------------------------------------------------------------
+scan:
+  scanners:
+    - vuln
+    - misconfig
+    - secret
+
+# --- Vulnerability handling -----------------------------------------------
+vulnerability:
+  type:
+    - os
+    - library
+
+  # TBD, and it needs a deliberate answer.
+  #
+  # `true`  — only findings with an available fix block. A critical
+  #           vulnerability with no fix cannot be remediated by upgrading, so
+  #           blocking on it stops delivery without improving security and
+  #           generates standing exceptions that hollow out the exception
+  #           process.
+  # `false` — everything blocks. Stricter, and it will produce exceptions.
+  #
+  # Recommended: true, with unfixable findings tracked separately so the
+  # question becomes "why is this component still in use".
+  ignore-unfixed: true
+
+# --- Exceptions -----------------------------------------------------------
+# Every entry in this file is an exception and carries every requirement of
+# one: narrow scope, justification, compensating control, approver, expiry.
+#
+# A .trivyignore has NO concept of expiry. Without external enforcement, an
+# entry is permanent by construction — and invisible precisely because it
+# works. See .trivyignore.example.
+ignorefile: .trivyignore
+
+# --- Database -------------------------------------------------------------
+db:
+  # Never set to true in a pipeline. A stale database produces a clean report
+  # indistinguishable from a genuinely clean scan, which is worse than no
+  # scan — false assurance is acted upon.
+  skip-update: false
+
+  # TBD: in a network with controlled outbound access, either the specific
+  # egress is permitted or an internal mirror is maintained. See interaction
+  # I-14 in docs/01-architecture/service-interaction.md
+  # repository: registry.example.internal/trivy-db
+
+# --- Output ---------------------------------------------------------------
+format: table
+
+# For pipeline consumption and evidence retention, the pipeline should also
+# produce a machine-readable report:
+#   trivy image --config trivy.yaml --format json  --output trivy-report.json <image>
+#   trivy image --config trivy.yaml --format sarif --output trivy-report.sarif <image>

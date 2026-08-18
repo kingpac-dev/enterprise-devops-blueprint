@@ -1,0 +1,120 @@
+# UAT deployment.
+#
+# Implements: docs/06-container/docker-compose-standard.md
+#
+# Copy to deployment/uat/compose.yml and adjust the marked values.
+#
+# UAT should mirror production as closely as the environment allows. Every
+# deliberate divergence is a gap in what UAT actually proves — record them in
+# the parity register, see docs/01-architecture/environment-architecture.md.
+#
+# Deliberate divergences from prod in this file:
+#   - Log level is Debug rather than Information
+#   - Resource limits are lower, reflecting smaller hardware
+#   - Credentials are UAT-specific, and share nothing with prod
+#
+# The image tags are the SAME artifacts that will be promoted to production.
+# Nothing is rebuilt between here and prod.
+
+name: myapp-uat
+
+services:
+
+  web:
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/web:${WEB_VERSION:?WEB_VERSION is required}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      API_BASE_URL: ${WEB_API_BASE_URL:?WEB_API_BASE_URL is required}
+      ENVIRONMENT: uat
+      LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    networks:
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/api:${API_VERSION:?API_VERSION is required}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__Default: ${DB_CONNECTION_STRING:?DB_CONNECTION_STRING is required}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
+      Serilog__MinimumLevel__Default: Debug
+    networks:
+      - frontend
+      - backend
+    volumes:
+      - api-dataprotection:/home/appuser/.aspnet/DataProtection-Keys
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 45s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/worker:${WORKER_VERSION:?WORKER_VERSION is required}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DOTNET_ENVIRONMENT: Staging
+      ConnectionStrings__Default: ${DB_CONNECTION_STRING:?DB_CONNECTION_STRING is required}
+      WORKER_LIVENESS_FILE: /var/run/worker/alive
+      WORKER_LIVENESS_MAX_AGE_SECONDS: "120"
+    networks:
+      - backend
+    stop_grace_period: 120s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
+
+volumes:
+  api-dataprotection:

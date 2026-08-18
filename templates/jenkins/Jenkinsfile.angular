@@ -1,0 +1,249 @@
+// =========================================================================
+// Jenkinsfile — Angular application.
+//
+// Complete and runnable. Differs from Jenkinsfile.template only in the
+// Restore / Lint / Build / Test / Analysis stages; see that file for the
+// rationale behind the shared stages.
+//
+// The duplication between the four templates is deliberate and temporary.
+// A Jenkins Shared Library is Phase 5 work — see Jenkinsfile.template.
+//
+// BLOCKED BY ADR-0009: Deploy, health verification, and rollback.
+// =========================================================================
+
+pipeline {
+
+    agent { label 'linux-docker-node' }   // TBD
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 45, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '50', artifactNumToKeepStr: '50'))
+        skipDefaultCheckout(true)
+    }
+
+    environment {
+        APP_NAME       = 'orders-web'                        // ADJUST
+        HARBOR_URL     = 'harbor.example.internal'           // TBD
+        HARBOR_PROJ    = 'my-team'                           // TBD
+        SONAR_HOST     = 'https://sonarqube.example.internal' // TBD
+        TRIVY_SEVERITY = 'HIGH,CRITICAL'                     // TBD
+        // npm writes here; keeps the cache inside the workspace so it is
+        // removed by cleanWs() rather than shared between builds.
+        npm_config_cache = "${WORKSPACE}/.npm"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                }
+            }
+        }
+
+        stage('Compute identity') {
+            steps {
+                script {
+                    def branch = env.BRANCH_NAME ?: 'unknown'
+                    if (branch == 'main' || branch.startsWith('release/')) {
+                        env.VERSION    = readFile('VERSION').trim()
+                        env.IMAGE_TAG  = "${env.VERSION}-${env.GIT_COMMIT_SHORT}"
+                        env.PROMOTABLE = 'true'
+                    } else if (branch == 'develop') {
+                        env.VERSION    = '0.0.0'
+                        env.IMAGE_TAG  = "sha-${env.GIT_COMMIT_SHORT}"
+                        env.PROMOTABLE = 'true'
+                    } else {
+                        env.VERSION    = '0.0.0'
+                        env.IMAGE_TAG  = "unpublished-${env.GIT_COMMIT_SHORT}"
+                        env.PROMOTABLE = 'false'
+                    }
+                    env.IMAGE_REF       = "${env.HARBOR_URL}/${env.HARBOR_PROJ}/${env.APP_NAME}:${env.IMAGE_TAG}"
+                    env.BUILD_TIMESTAMP = sh(script: 'date -u +%Y-%m-%dT%H:%M:%SZ', returnStdout: true).trim()
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // `npm ci` installs the lockfile exactly and fails if it disagrees
+        // with package.json. `npm install` may resolve differently and
+        // rewrite the lockfile — so the same commit would produce different
+        // dependency sets on different days.
+        stage('Restore dependencies') {
+            steps {
+                sh '''
+                    set -eu
+                    npm ci
+                '''
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                sh '''
+                    set -eu
+                    npm run lint
+                '''
+            }
+        }
+
+        stage('Unit test and coverage') {
+            steps {
+                sh '''
+                    set -eu
+                    npm run test -- \
+                      --watch=false \
+                      --browsers=ChromeHeadless \
+                      --code-coverage
+                '''
+                // Coverage measures which lines executed, not whether
+                // anything was asserted about them. A high number on
+                // shallow component tests is not evidence of testing.
+            }
+            post {
+                always {
+                    junit testResults: 'test-results/**/*.xml', allowEmptyResults: true
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh '''
+                    set -eu
+                    npm run build -- --configuration=production
+                '''
+                // Nothing environment-specific is compiled in. Configuration
+                // is written to assets/config.json at container start —
+                // see templates/docker/runtime-config.angular.sh
+            }
+        }
+
+        // -----------------------------------------------------------------
+        stage('Static analysis') {
+            steps {
+                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                    // set +x so the token is not echoed into the build log.
+                    sh '''
+                        set +x
+                        set -eu
+                        npx sonar-scanner \
+                          -Dsonar.host.url="${SONAR_HOST}" \
+                          -Dsonar.token="${SONAR_TOKEN}" \
+                          -Dsonar.projectVersion="${VERSION}"
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        stage('Dependency and secret scan') {
+            steps {
+                sh '''
+                    set -eu
+                    trivy fs --config trivy.yaml \
+                      --scanners vuln,secret,misconfig \
+                      --severity "${TRIVY_SEVERITY}" \
+                      --exit-code 1 \
+                      .
+                '''
+            }
+        }
+
+        stage('Docker build') {
+            steps {
+                sh '''
+                    set -eu
+                    docker build \
+                      --build-arg APP_NAME="${APP_NAME}" \
+                      --build-arg VERSION="${VERSION}" \
+                      --build-arg GIT_COMMIT="${GIT_COMMIT_SHORT}" \
+                      --build-arg BUILD_TIMESTAMP="${BUILD_TIMESTAMP}" \
+                      --build-arg REPOSITORY_URL="${GIT_URL}" \
+                      --tag "${IMAGE_REF}" \
+                      .
+                '''
+            }
+        }
+
+        stage('Container scan') {
+            steps {
+                sh '''
+                    set -eu
+                    trivy image --config trivy.yaml \
+                      --severity "${TRIVY_SEVERITY}" --exit-code 1 "${IMAGE_REF}"
+                    trivy image --config trivy.yaml \
+                      --format json --output "trivy-${APP_NAME}-${IMAGE_TAG}.json" "${IMAGE_REF}"
+                '''
+            }
+        }
+
+        stage('Generate SBOM') {
+            steps {
+                sh '''
+                    set -eu
+                    trivy image --format cyclonedx \
+                      --output "sbom-${APP_NAME}-${IMAGE_TAG}.cdx.json" "${IMAGE_REF}"
+                '''
+            }
+        }
+
+        stage('Push to Harbor') {
+            when { environment name: 'PROMOTABLE', value: 'true' }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'harbor-push',
+                    usernameVariable: 'HARBOR_USER',
+                    passwordVariable: 'HARBOR_PASSWORD'
+                )]) {
+                    sh '''
+                        set +x
+                        set -eu
+                        echo "${HARBOR_PASSWORD}" | docker login "${HARBOR_URL}" \
+                            --username "${HARBOR_USER}" --password-stdin
+                        set -x
+                        docker push "${IMAGE_REF}"
+                        docker logout "${HARBOR_URL}"
+                    '''
+                }
+                script {
+                    env.IMAGE_DIGEST = sh(
+                        script: 'docker inspect --format "{{index .RepoDigests 0}}" "${IMAGE_REF}"',
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+
+        // BLOCKED BY ADR-0009 — see Jenkinsfile.template for the full note.
+        stage('Deploy and verify') {
+            when { expression { return false } }
+            steps {
+                echo 'BLOCKED — adr/0009: deployment mechanism undecided.'
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-*.json, sbom-*.json',
+                             allowEmptyArchive: true, fingerprint: true
+            cleanWs()
+        }
+        failure {
+            echo "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+        }
+    }
+}
