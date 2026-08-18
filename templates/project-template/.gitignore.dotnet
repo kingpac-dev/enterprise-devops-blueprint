@@ -1,0 +1,58 @@
+# Copy to your repository root as `.gitignore`.
+#
+# The first section is the one that matters. A secret committed and then
+# deleted remains in history, in every clone, fork, and mirror, and in any CI
+# cache. Deleting the file is not remediation — rotate the credential.
+
+# --- Secrets and local configuration -------------------------------------
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+appsettings.Local.json
+*.pem
+*.key
+*.pfx
+*.p12
+*.user
+
+# --- Build output ---------------------------------------------------------
+bin/
+obj/
+publish/
+*.dll
+*.pdb
+
+# NOTE: packages.lock.json is NOT ignored. It must be committed — without it
+# the same commit can resolve different dependency versions on different
+# days, and `dotnet restore --locked-mode` in the pipeline will fail.
+
+# --- Test and analysis output --------------------------------------------
+TestResults/
+coverage/
+*.trx
+*.coverage
+coverage.opencover.xml
+.sonarqube/
+.scannerwork/
+trivy-report.*
+sbom-*.json
+*.sarif
+
+# --- Editor and OS --------------------------------------------------------
+.vs/
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.history/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# --- Local scratch --------------------------------------------------------
+tmp/
+temp/
+*.local
+*.log

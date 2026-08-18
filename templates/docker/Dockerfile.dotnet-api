@@ -1,0 +1,101 @@
+# syntax=docker/dockerfile:1
+#
+# .NET Web API — multi-stage build, non-root runtime.
+#
+# Implements: docs/06-container/dockerfile-standard.md
+#             docs/06-container/docker-standard.md
+#
+# Copy to your repository as `Dockerfile` and adjust the marked values.
+#
+# TBD before use:
+#   - .NET version, and whether images are pinned by digest
+#   - PROJECT_PATH and APP_DLL must match your solution
+
+
+# --------------------------------------------------------------------------
+# Build stage
+# --------------------------------------------------------------------------
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+WORKDIR /src
+
+# ADJUST: paths to your project
+ARG PROJECT_PATH=src/MyApi/MyApi.csproj
+
+# Project files first, so a source change does not invalidate the restore
+# layer. `--locked-mode` requires a committed packages.lock.json and fails if
+# it disagrees with the project file — without it, the same commit can
+# resolve different dependency versions on different days.
+COPY ["src/MyApi/MyApi.csproj", "src/MyApi/"]
+COPY ["src/MyApi/packages.lock.json", "src/MyApi/"]
+RUN dotnet restore "${PROJECT_PATH}" --locked-mode
+
+COPY . .
+RUN dotnet publish "${PROJECT_PATH}" \
+        --configuration Release \
+        --no-restore \
+        --output /app/publish
+
+
+# --------------------------------------------------------------------------
+# Runtime stage
+# --------------------------------------------------------------------------
+# The ASP.NET runtime image — not the SDK. A runtime image containing a
+# compiler and package manager hands an attacker who achieves code execution
+# the tools to build and install whatever they need next.
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+
+# Build metadata, supplied by the pipeline. NOT secrets — ARG values are
+# readable in image history by anyone who can pull the image.
+ARG VERSION=0.0.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIMESTAMP=unknown
+ARG REPOSITORY_URL=unknown
+
+LABEL org.opencontainers.image.title="dotnet-api" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_TIMESTAMP}" \
+      org.opencontainers.image.source="${REPOSITORY_URL}" \
+      org.opencontainers.image.vendor="TBD"
+
+# curl is installed solely so the container can health-check itself.
+#
+# This is a deliberate, documented exception to "no unnecessary tools in the
+# runtime stage". A health check needs an HTTP client inside the container,
+# and the runtime image has none. The alternatives are: ship a small
+# purpose-built health-check binary, or omit container health checks and rely
+# on external probing — which is not available under Docker Compose.
+#
+# If your platform can probe externally, remove this and the HEALTHCHECK.
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 1001 appgroup \
+ && useradd  --system --uid 1001 --gid appgroup --no-create-home appuser
+
+WORKDIR /app
+COPY --from=build --chown=1001:1001 /app/publish .
+
+USER 1001
+
+# Above 1024, because a non-root process cannot bind to lower ports.
+# Set explicitly rather than relying on the image default.
+ENV ASPNETCORE_HTTP_PORTS=8080 \
+    ASPNETCORE_ENVIRONMENT=Production \
+    DOTNET_RUNNING_IN_CONTAINER=true
+EXPOSE 8080
+
+# Liveness only. It must NOT check dependencies: a slow database would then
+# fail every instance's liveness probe, restarting every container
+# repeatedly, adding connection churn to a dependency already under strain.
+# Readiness is checked by the deployment process, not by the container.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+    CMD curl --fail --silent --show-error http://127.0.0.1:8080/health/live || exit 1
+
+# Exec form. Shell form makes the shell PID 1, which does not forward
+# SIGTERM — the application would be killed at the stop timeout instead of
+# shutting down cleanly.
+# ADJUST: your assembly name
+ENTRYPOINT ["dotnet", "MyApi.dll"]

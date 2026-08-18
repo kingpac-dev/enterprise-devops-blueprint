@@ -1,0 +1,12 @@
+{
+  "name": "orders-web-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Blueprint example: runtime configuration for build-once promotion. Not a full Angular application.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}

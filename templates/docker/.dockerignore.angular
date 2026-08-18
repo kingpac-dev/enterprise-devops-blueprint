@@ -1,0 +1,52 @@
+# Copy to your repository root as `.dockerignore`.
+#
+# Without this file the entire build context is sent to the daemon, including
+# .git and any local .env. Anything that reaches the build context can end up
+# inside the image, and image layers are additive — deleting a file in a
+# later layer does not remove it from the image.
+
+# --- Secrets and local configuration -------------------------------------
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+.npmrc
+
+# --- Version control ------------------------------------------------------
+.git
+.gitignore
+.gitattributes
+.github
+
+# --- Dependencies and build output ---------------------------------------
+node_modules
+dist
+out
+.angular
+coverage
+*.tsbuildinfo
+
+# --- Test output ----------------------------------------------------------
+test-results
+playwright-report
+
+# --- Editor and OS --------------------------------------------------------
+.vscode
+.idea
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Docker and CI --------------------------------------------------------
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+compose*.yml
+Jenkinsfile*
+deployment
+
+# --- Documentation --------------------------------------------------------
+README.md
+AGENTS.md
+docs
