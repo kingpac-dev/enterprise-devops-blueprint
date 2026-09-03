@@ -248,8 +248,8 @@ Adopting projects should record which blueprint version they align with.
 | Standard operating procedures | Draft for review |
 | Infrastructure standards | Draft for review |
 | Platform runbooks | Draft for review — never executed |
-| ADRs | 9 written, all `Proposed` |
-| Templates | Jenkins, container, Compose, Sonar, security, monitoring drafted; project template not started |
+| ADRs | 10 written; 0009 superseded by 0010 |
+| Templates | All areas drafted, covering five application types |
 | Examples | Draft — compile and their tests pass |
 | Platform implementation | Not started |
 

@@ -195,7 +195,7 @@ The **policy** above is independent of how the pipeline reaches runtime hosts. T
 | **C — Pull-based agent** | Revert the **desired state**; the host converges. **Asynchronous** — verification must wait for convergence, and automatic rollback needs a feedback path |
 | D — Portainer API | An API call; synchronous. Not recommended |
 
-Under option C, "rollback completed" and "rollback took effect" are different moments. See [cd-standard.md](cd-standard.md#8-blocked-the-deployment-mechanism) and [ADR-0009](../../adr/0009-deployment-mechanism-to-runtime-hosts.md).
+Under option C, "rollback completed" and "rollback took effect" are different moments. See [cd-standard.md](cd-standard.md#8-the-deployment-mechanism-and-what-it-changed) and [ADR-0009](../../adr/0009-deployment-mechanism-to-runtime-hosts.md).
 
 ---
 
@@ -210,7 +210,7 @@ Under option C, "rollback completed" and "rollback took effect" are different mo
 | `TBD` — rollback exercise frequency |
 | `TBD` — automated check that each production service's predecessor is retained |
 | `TBD` — host-local image cache, to decouple rollback from Harbor |
-| `TBD` — migration tooling and ownership |
+| `TBD` — migration **tooling** selection. See [database-migration-standard.md](database-migration-standard.md) |
 
 ---
 

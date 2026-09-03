@@ -62,10 +62,6 @@ Structure and colour are verified. The PromQL expressions have not been evaluate
 
 ## Baseline Alert Coverage
 
----
-
-## Baseline Alert Coverage
-
 ```text
 service unavailable
 elevated error rate

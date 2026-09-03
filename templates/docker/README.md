@@ -19,6 +19,12 @@ Image build definitions per application type. The rules they implement are defin
 | File | Target | Status |
 | --- | --- | --- |
 | [Dockerfile.angular](Dockerfile.angular) | Angular build served by unprivileged nginx | Draft |
+| [Dockerfile.react-vite](Dockerfile.react-vite) | React + TypeScript + Vite, served by unprivileged nginx; PWA-aware | Draft |
+| [nginx.react-vite.conf](nginx.react-vite.conf) | SPA routing, **service worker never cached**, PWA manifest, cache policy | Draft |
+| [runtime-config.react-vite.sh](runtime-config.react-vite.sh) | Writes `/config.json` at container start | Draft |
+| [Dockerfile.go-fiber](Dockerfile.go-fiber) | Go Fiber API on **distroless static**, non-root | Draft |
+| [.dockerignore.react-vite](.dockerignore.react-vite) | Excludes `node_modules`, `dist`, `.vite`, `.env`, `.git` | Draft |
+| [.dockerignore.go](.dockerignore.go) | Excludes build output and `.env`; **keeps `vendor/`** | Draft |
 | [nginx.angular.conf](nginx.angular.conf) | SPA routing, cache policy, health endpoint, security headers | Draft |
 | [runtime-config.angular.sh](runtime-config.angular.sh) | Writes `assets/config.json` at container start | Draft |
 | [Dockerfile.dotnet-api](Dockerfile.dotnet-api) | .NET Web API with a liveness health check | Draft |
@@ -26,11 +32,21 @@ Image build definitions per application type. The rules they implement are defin
 | [.dockerignore.angular](.dockerignore.angular) | Excludes `node_modules`, build output, `.env`, `.git` | Draft |
 | [.dockerignore.dotnet](.dockerignore.dotnet) | Excludes `bin`, `obj`, test output, `.env`, `.git` | Draft |
 
-## The Angular Runtime Configuration Mechanism
+## Which Template for Which Stack
 
-These templates resolve a `TBD` that several standards deferred: how an Angular application satisfies build-once promotion.
+| Application type | Dockerfile | Supporting files |
+| --- | --- | --- |
+| Angular | [Dockerfile.angular](Dockerfile.angular) | `nginx.angular.conf`, `runtime-config.angular.sh`, `.dockerignore.angular` |
+| React + Vite | [Dockerfile.react-vite](Dockerfile.react-vite) | `nginx.react-vite.conf`, `runtime-config.react-vite.sh`, `.dockerignore.react-vite` |
+| .NET Web API | [Dockerfile.dotnet-api](Dockerfile.dotnet-api) | `.dockerignore.dotnet` |
+| .NET Worker | [Dockerfile.dotnet-worker](Dockerfile.dotnet-worker) | `.dockerignore.dotnet` |
+| Go Fiber | [Dockerfile.go-fiber](Dockerfile.go-fiber) | `.dockerignore.go` |
 
-A naive Angular build substitutes environment values at **compile** time, producing a different artifact per environment — which breaks the model the whole delivery design rests on.
+## The Frontend Runtime Configuration Mechanism
+
+These templates resolve a `TBD` that several standards deferred: how a frontend satisfies build-once promotion.
+
+Both frameworks substitute environment values at **compile** time by default — Angular through `environment.ts` file replacement, Vite through `import.meta.env.VITE_*`. Either produces a different artifact per environment, which breaks the model the whole delivery design rests on.
 
 The mechanism here: [runtime-config.angular.sh](runtime-config.angular.sh) runs from nginx's `/docker-entrypoint.d/` before nginx starts, writes `assets/config.json` from environment variables, and the application fetches it during bootstrap. The same image is then promoted unchanged to DEV, UAT, and PROD.
 
@@ -52,15 +68,11 @@ The alternatives are a purpose-built health-check binary, or no container health
 | Shell script syntax (`sh -n`) | Pass |
 | Script behaviour: missing required value | Fails with the documented message |
 | Script behaviour: generated `config.json` | Valid JSON, correct values |
-| Anti-pattern scan: floating base tag, shell-form `ENTRYPOINT`, secret in `ARG`, SDK in runtime stage, missing `USER` | Pass on all three Dockerfiles |
+| Anti-pattern scan: floating base tag, shell-form `ENTRYPOINT`, secret in `ARG`, SDK in runtime stage, missing `USER` | Pass on all five Dockerfiles |
 | **`docker build`** | **Not run — no Docker daemon available in this environment** |
-| **`nginx -t` on the configuration** | **Not run — nginx not available** |
+| **`nginx -t` on either nginx configuration** | **Not run — nginx not available** |
 
-The last two matter. These Dockerfiles have not been built, and the nginx configuration has not been parsed by nginx. Build them once before adopting them.
-
----
-
-## Requirements
+The last two matter. **None of these Dockerfiles has been built**, and neither nginx configuration has been parsed by nginx. Build each once before adopting it.
 
 ---
 

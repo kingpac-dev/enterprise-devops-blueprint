@@ -8,7 +8,8 @@
 // the compiler, so running it after the build yields an analysis with no
 // results and a gate that passes on nothing.
 //
-// BLOCKED BY ADR-0009: Deploy, health verification, and rollback.
+// DEPLOYMENT IS PULL-BASED. This pipeline does not connect to any
+// runtime host. See adr/0010 and deploy-gitops.sh.
 // =========================================================================
 
 pipeline {
@@ -232,29 +233,52 @@ pipeline {
         }
 
         // -----------------------------------------------------------------
-        // [WORKER] BLOCKED BY ADR-0009, and verification differs from an API.
+        // DEPLOY — pull-based. See adr/0010 and
+        // docs/05-ci-cd/deployment-repository-standard.md
         //
-        // A worker has no readiness endpoint to poll. "Deployed successfully"
-        // must be established from behaviour instead:
+        // This pipeline does NOT connect to a runtime host. It updates the
+        // desired state in the deployment repository, asks Portainer to
+        // synchronize, and WAITS FOR CONVERGENCE.
         //
-        //   - the container is running
-        //   - the liveness file has been touched since the deployment
-        //     started, meaning at least one cycle has completed
-        //   - the backlog is not growing
+        // The wait is the part a push model does not need. Without it the
+        // pipeline cannot answer "did it deploy?", and rollback has no
+        // trigger. deploy-gitops.sh reverts the desired state on timeout.
         //
-        // Container-running alone is not verification. A worker that starts,
-        // fails to connect to its queue, and retries silently is running and
-        // processing nothing — and every check that only asks "is it up?"
-        // reports success.
-        //
-        // The stop grace period must also exceed the longest normal
-        // processing cycle. A worker killed mid-transaction can leave partial
-        // writes or unacknowledged messages — which is the difference between
-        // a clean deployment and a data-integrity incident.
-        stage('Deploy and verify') {
-            when { expression { return false } }
+        // [LIBRARY CANDIDATE] — identical in every pipeline.
+        // -----------------------------------------------------------------
+        stage('Deploy DEV') {
+            when {
+                allOf {
+                    environment name: 'PROMOTABLE', value: 'true'
+                    branch 'develop'
+                }
+            }
             steps {
-                echo 'BLOCKED — adr/0009: deployment mechanism undecided.'
+                withCredentials([
+                    string(credentialsId: 'deploy-repo-token', variable: 'DEPLOY_REPO_TOKEN'),
+                    string(credentialsId: 'portainer-webhook-dev', variable: 'PORTAINER_WEBHOOK')
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+
+                        # Confirms the RUNNING version, not what Portainer
+                        # believes. The `version` label is already required on
+                        # every service's metrics, so this adds no new surface
+                        # and works for workers as well as APIs.
+                        # TBD — Prometheus URL.
+                        export VERSION_PROBE="curl -sf \"${PROMETHEUS_URL}/api/v1/query?query=up{service=\\"${APP_NAME}\\",environment=\\"dev\\"}\" | jq -r '.data.result[0].metric.version // empty'"
+
+                        sh ./deploy-gitops.sh                           --service     "${APP_NAME}"                           --version     "${IMAGE_TAG}"                           --environment dev
+                    '''
+                }
+            }
+            post {
+                failure {
+                    // Exit 3 means it rolled back; exit 4 means the rollback
+                    // ALSO failed and the desired state is wrong.
+                    echo 'Deployment did not converge. Check whether the rollback succeeded — see docs/09-operations/rollback-runbook.md'
+                }
             }
         }
     }

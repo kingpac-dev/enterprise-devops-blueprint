@@ -10,7 +10,7 @@ Repository structure, required root files, and the deployment configuration layo
 
 ## Status
 
-**Draft for review.** Six files written. Together with [docker/](../docker/), [compose/](../compose/), [jenkins/](../jenkins/), [sonar/](../sonar/), and [security/](../security/), a new repository can be assembled today — except for the deployment configuration, which is blocked by [ADR-0009](../../adr/0009-deployment-mechanism-to-runtime-hosts.md).
+**Draft for review.** Eight files written. Together with [docker/](../docker/), [compose/](../compose/), [jenkins/](../jenkins/), [sonar/](../sonar/), and [security/](../security/), a new repository can be assembled today for any of the five supported application types. Deployment configuration now has a decided mechanism — [ADR-0010](../../adr/0010-portainer-gitops-deployment.md) — which is not yet implemented in the pipeline templates.
 
 ---
 
@@ -46,6 +46,8 @@ Do not force directories a project does not need. A worker service without a pub
 | [RELEASE-NOTES.template.md](RELEASE-NOTES.template.md) | Per-release notes the approver reads **before** approving | Draft |
 | [VERSION](VERSION) | The version the pipeline reads to build the image tag | Draft |
 | [.gitignore.angular](.gitignore.angular) | Angular ignore rules | Draft |
+| [.gitignore.react-vite](.gitignore.react-vite) | React + Vite ignore rules | Draft |
+| [.gitignore.go](.gitignore.go) | Go ignore rules; `go.sum` and `vendor/` deliberately **not** ignored | Draft |
 | [.gitignore.dotnet](.gitignore.dotnet) | .NET ignore rules; `packages.lock.json` deliberately **not** ignored | Draft |
 
 Deployment configuration comes from [templates/compose/](../compose/), which already provides `compose.dev.yml`, `compose.uat.yml`, `compose.prod.yml`, and `.env.example`.

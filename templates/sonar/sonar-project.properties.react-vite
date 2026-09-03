@@ -1,0 +1,49 @@
+# SonarQube configuration — React + TypeScript + Vite application.
+#
+# Copy to your repository root as `sonar-project.properties`.
+# Implements: docs/05-ci-cd/ and templates/sonar/quality-gate-baseline.md
+#
+# The analysis token is supplied by Jenkins Credentials at run time. It must
+# NEVER appear in this file, in the repository, or in a build log.
+
+# --- Project identity -----------------------------------------------------
+# ADJUST. Must match the repository, Harbor project, and the `service` label
+# used in metrics and logs.
+sonar.projectKey=mes-web
+sonar.projectName=MES Web
+
+# --- Sources and tests ----------------------------------------------------
+# Separated deliberately: without this, test code is measured as production
+# code, which distorts every ratio the gate evaluates.
+sonar.sources=src
+sonar.tests=src
+sonar.test.inclusions=**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx
+sonar.exclusions=**/node_modules/**,**/dist/**,**/*.test.*,**/*.spec.*
+
+sonar.sourceEncoding=UTF-8
+
+# --- Coverage -------------------------------------------------------------
+# Path must match what the test run actually produces. Vitest with the v8 or
+# istanbul provider writes lcov here by default; a wrong path reports ZERO
+# coverage, which looks like a coverage problem rather than a configuration
+# one — and gets "fixed" by lowering the threshold.
+sonar.javascript.lcov.reportPaths=coverage/lcov.info
+sonar.typescript.lcov.reportPaths=coverage/lcov.info
+
+# Generated, entry-point, and configuration files carry no useful coverage
+# signal.
+sonar.coverage.exclusions=**/*.test.*,**/*.spec.*,**/main.tsx,**/vite-env.d.ts,**/*.config.ts,**/setupTests.ts
+
+# --- Exclusions -----------------------------------------------------------
+# Every exclusion hides code from the gate. Each needs a reason, and one that
+# hides real application code defeats the gate entirely.
+#
+# ADJUST, and record why:
+# sonar.issue.ignore.multicriteria=e1
+# sonar.issue.ignore.multicriteria.e1.ruleKey=*
+# sonar.issue.ignore.multicriteria.e1.resourceKey=**/api/generated/**
+
+# --- Analysis scope -------------------------------------------------------
+# TBD: whether the gate evaluates new code only. Depends on the SonarQube
+# edition — the Community edition provides no branch or pull-request
+# analysis, which changes what the gate measures. See ADR-0003.

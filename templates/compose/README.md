@@ -59,6 +59,34 @@ Both are a few lines. Both are in the PROD and UAT templates and deliberately ab
 
 **The backend network is `internal: true`.** One line, and the components most worth isolating lose their route out.
 
+## Portainer GitOps Changes How Values Reach the Container
+
+**These templates use `env_file: - .env`, which does not work under Portainer GitOps** — [ADR-0010](../../adr/0010-portainer-gitops-deployment.md).
+
+Portainer states that when a stack is deployed from a repository, a `stack.env` file must already reside in the Git repo. Putting production credentials there would commit them, which is prohibited.
+
+Under GitOps, values reach the container differently:
+
+| Value | Where it lives | Why |
+| --- | --- | --- |
+| **Image tag** | **In the compose file, in Git** | It is the deployment trigger. A tag in a Portainer variable would make deployment a manual UI change |
+| Non-sensitive configuration | Compose file in Git, or a Portainer environment variable | Either works |
+| **Credentials** | **Portainer environment variables only** | Stored in Portainer, not in the repository |
+
+So a GitOps-deployed compose file drops `env_file` and interpolates directly:
+
+```yaml
+services:
+  api:
+    # The tag is literal and in Git — the pipeline commits a change to it.
+    image: harbor.example.internal/team/api:1.4.2-a82f912
+    environment:
+      # Substituted from Portainer environment variables. Never committed.
+      ConnectionStrings__Default: ${DB_CONNECTION_STRING:?DB_CONNECTION_STRING is required}
+```
+
+`TBD` — a `compose.gitops.yml` variant of these templates. Until it exists, adapt by removing `env_file` and confirming every required value is set in Portainer before the first deployment. A missing value fails the stack at start, which is the intended behaviour and still worth checking in advance.
+
 ## Validation Performed
 
 | Check | Result |
@@ -70,10 +98,6 @@ Both are a few lines. Both are in the PROD and UAT templates and deliberately ab
 | **`docker compose up`** | **Not run — no Docker daemon available, and the referenced images do not exist** |
 
 Syntax and interpolation are verified. Runtime behaviour is not.
-
----
-
-## Production Requirements
 
 ---
 

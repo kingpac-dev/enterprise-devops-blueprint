@@ -1,20 +1,16 @@
 // =========================================================================
-// Jenkinsfile — Angular application.
+// Jenkinsfile — Go Fiber API.
 //
-// Complete and runnable. Differs from Jenkinsfile.template only in the
-// Restore / Lint / Build / Test / Analysis stages; see that file for the
-// rationale behind the shared stages.
+// Complete and runnable. See Jenkinsfile.template for the rationale behind
+// the shared stages.
 //
-// The duplication between the four templates is deliberate and temporary.
-// A Jenkins Shared Library is Phase 5 work — see Jenkinsfile.template.
-//
-// DEPLOYMENT IS PULL-BASED. This pipeline does not connect to any
-// runtime host. See adr/0010 and deploy-gitops.sh.
+// DEPLOYMENT IS PULL-BASED. This pipeline does not connect to any runtime
+// host. See adr/0010.
 // =========================================================================
 
 pipeline {
 
-    agent { label 'linux-docker-node' }   // TBD
+    agent { label 'linux-docker-go' }   // TBD
 
     options {
         timestamps()
@@ -25,14 +21,19 @@ pipeline {
     }
 
     environment {
-        APP_NAME       = 'orders-web'                        // ADJUST
-        HARBOR_URL     = 'harbor.example.internal'           // TBD
-        HARBOR_PROJ    = 'my-team'                           // TBD
+        APP_NAME       = 'orders-go-api'                      // ADJUST
+        MAIN_PACKAGE   = './cmd/api'                          // ADJUST
+        HARBOR_URL     = 'harbor.example.internal'            // TBD
+        HARBOR_PROJ    = 'my-team'                            // TBD
         SONAR_HOST     = 'https://sonarqube.example.internal' // TBD
-        TRIVY_SEVERITY = 'HIGH,CRITICAL'                     // TBD
-        // npm writes here; keeps the cache inside the workspace so it is
-        // removed by cleanWs() rather than shared between builds.
-        npm_config_cache = "${WORKSPACE}/.npm"
+        SONAR_KEY      = 'orders-go-api'                      // ADJUST
+        TRIVY_SEVERITY = 'HIGH,CRITICAL'                      // TBD
+        // Keep Go caches in the workspace so cleanWs() removes them and they
+        // are not shared between builds on a persistent agent.
+        GOPATH      = "${WORKSPACE}/.go"
+        GOCACHE     = "${WORKSPACE}/.gocache"
+        GOMODCACHE  = "${WORKSPACE}/.gomodcache"
+        CGO_ENABLED = '0'
     }
 
     stages {
@@ -69,46 +70,53 @@ pipeline {
             }
         }
 
-        // -----------------------------------------------------------------
-        // `npm ci` installs the lockfile exactly and fails if it disagrees
-        // with package.json. `npm install` may resolve differently and
-        // rewrite the lockfile — so the same commit would produce different
-        // dependency sets on different days.
         stage('Restore dependencies') {
             steps {
+                // `go mod download` resolves against go.sum, which pins every
+                // module by hash. A mismatch fails here — the Go equivalent
+                // of a locked restore.
+                //
+                // `go mod verify` re-checks that the downloaded modules match
+                // those hashes, which is the supply-chain check rather than
+                // merely a resolution one.
                 sh '''
                     set -eu
-                    npm ci
+                    go mod download
+                    go mod verify
                 '''
             }
         }
 
-        stage('Lint') {
+        stage('Lint and vet') {
             steps {
                 sh '''
                     set -eu
-                    npm run lint
+                    go vet ./...
+                    # TBD — golangci-lint, if adopted:
+                    # golangci-lint run --timeout 5m
                 '''
             }
         }
 
-        stage('Unit test and coverage') {
+        stage('Verify tidy') {
             steps {
+                // Fails if go.mod or go.sum are not what the source requires.
+                // Catches a dependency added without committing the updated
+                // module files — which would otherwise resolve differently on
+                // a clean machine.
                 sh '''
                     set -eu
-                    npm run test -- \
-                      --watch=false \
-                      --browsers=ChromeHeadless \
-                      --code-coverage
+                    cp go.mod go.mod.bak
+                    cp go.sum go.sum.bak
+                    go mod tidy
+                    if ! diff -q go.mod go.mod.bak >/dev/null || ! diff -q go.sum go.sum.bak >/dev/null; then
+                        echo "go.mod or go.sum is not tidy. Run 'go mod tidy' and commit the result."
+                        mv go.mod.bak go.mod
+                        mv go.sum.bak go.sum
+                        exit 1
+                    fi
+                    rm -f go.mod.bak go.sum.bak
                 '''
-                // Coverage measures which lines executed, not whether
-                // anything was asserted about them. A high number on
-                // shallow component tests is not evidence of testing.
-            }
-            post {
-                always {
-                    junit testResults: 'test-results/**/*.xml', allowEmptyResults: true
-                }
             }
         }
 
@@ -116,26 +124,41 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    npm run build -- --configuration=production
+                    go build -trimpath -o /dev/null "${MAIN_PACKAGE}"
                 '''
-                // Nothing environment-specific is compiled in. Configuration
-                // is written to assets/config.json at container start —
-                // see templates/docker/runtime-config.angular.sh
             }
         }
 
-        // -----------------------------------------------------------------
+        stage('Unit test and coverage') {
+            steps {
+                // -race detects data races, which are the defect class Go
+                // makes easy to introduce and hard to reproduce. It requires
+                // CGO, so it is enabled only for the test run — the shipped
+                // binary is still built with CGO_ENABLED=0.
+                sh '''
+                    set -eu
+                    CGO_ENABLED=1 go test ./... \
+                      -race \
+                      -coverprofile=coverage.out \
+                      -covermode=atomic \
+                      -timeout 5m
+                    go tool cover -func=coverage.out | tail -1
+                '''
+            }
+        }
+
         stage('Static analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
-                    // set +x so the token is not echoed into the build log.
                     sh '''
                         set +x
                         set -eu
-                        npx sonar-scanner \
+                        sonar-scanner \
                           -Dsonar.host.url="${SONAR_HOST}" \
                           -Dsonar.token="${SONAR_TOKEN}" \
-                          -Dsonar.projectVersion="${VERSION}"
+                          -Dsonar.projectKey="${SONAR_KEY}" \
+                          -Dsonar.projectVersion="${VERSION}" \
+                          -Dsonar.go.coverage.reportPaths=coverage.out
                     '''
                 }
             }
@@ -149,16 +172,18 @@ pipeline {
             }
         }
 
-        // -----------------------------------------------------------------
         stage('Dependency and secret scan') {
             steps {
                 sh '''
                     set -eu
+                    # govulncheck reports only vulnerabilities in code paths
+                    # the binary actually REACHES, which produces far less
+                    # noise than a manifest-level scan. TBD whether adopted.
+                    # go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
                     trivy fs --config trivy.yaml \
                       --scanners vuln,secret,misconfig \
-                      --severity "${TRIVY_SEVERITY}" \
-                      --exit-code 1 \
-                      .
+                      --severity "${TRIVY_SEVERITY}" --exit-code 1 .
                 '''
             }
         }
@@ -168,19 +193,21 @@ pipeline {
                 sh '''
                     set -eu
                     docker build \
-                      --build-arg APP_NAME="${APP_NAME}" \
+                      --build-arg MAIN_PACKAGE="${MAIN_PACKAGE}" \
                       --build-arg VERSION="${VERSION}" \
                       --build-arg GIT_COMMIT="${GIT_COMMIT_SHORT}" \
                       --build-arg BUILD_TIMESTAMP="${BUILD_TIMESTAMP}" \
                       --build-arg REPOSITORY_URL="${GIT_URL}" \
-                      --tag "${IMAGE_REF}" \
-                      .
+                      --tag "${IMAGE_REF}" .
                 '''
             }
         }
 
         stage('Container scan') {
             steps {
+                // A distroless Go image has almost no OS packages, so this
+                // scan usually reports only what the Go binary itself pulled
+                // in. A near-empty result here is expected, not suspicious.
                 sh '''
                     set -eu
                     trivy image --config trivy.yaml \
@@ -281,7 +308,7 @@ pipeline {
 
     post {
         always {
-            archiveArtifacts artifacts: 'trivy-*.json, sbom-*.json',
+            archiveArtifacts artifacts: 'trivy-*.json, sbom-*.json, coverage.out',
                              allowEmptyArchive: true, fingerprint: true
             cleanWs()
         }

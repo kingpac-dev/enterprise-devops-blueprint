@@ -154,7 +154,7 @@ Under expand/contract, the removal step is a separate release from the addition.
 
 **Never promise automatic rollback for an irreversible database change.** Where a release cannot be rolled back, say so in the release notes and plan forward recovery instead.
 
-`TBD` — migration tooling, ownership, and execution stage, in [05-ci-cd/](../05-ci-cd/).
+Migration tooling, ownership, and execution stage are defined in [database-migration-standard.md](../05-ci-cd/database-migration-standard.md). Tooling selection remains `TBD`; the requirements it must satisfy do not.
 
 ---
 
@@ -205,7 +205,7 @@ After merge-back, `develop` contains the fix and its next release is 1.5.0, whic
 | `TBD` — tag protection configuration | Whether tags are immutable in practice |
 | `TBD` — release cadence: scheduled or on demand | Planning |
 | `TBD` — release note generation approach | Approver information quality |
-| `TBD` — migration tooling and ownership | Rollback safety |
+| `TBD` — migration **tooling** selection. Requirements are set in [database-migration-standard.md](../05-ci-cd/database-migration-standard.md) | Rollback safety |
 | `TBD` — whether a structured commit convention drives versioning | Automation |
 
 ---
