@@ -1,0 +1,110 @@
+# syntax=docker/dockerfile:1
+#
+# Go Fiber API — multi-stage build, distroless runtime, non-root.
+#
+# Implements: docs/06-container/dockerfile-standard.md
+#             docs/06-container/docker-standard.md
+#
+# Copy to your repository as `Dockerfile` and adjust the marked values.
+#
+# TBD before use:
+#   - Go version, and whether images are pinned by digest
+#   - MAIN_PACKAGE path
+
+
+# --------------------------------------------------------------------------
+# Build stage
+# --------------------------------------------------------------------------
+FROM golang:1.23-alpine AS build
+
+WORKDIR /src
+
+# Module files first, so a source change does not invalidate the download
+# layer. `go mod download` is the Go equivalent of a locked restore:
+# go.sum pins every module by hash, and a mismatch fails the build.
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# ADJUST: path to your main package.
+ARG MAIN_PACKAGE=./cmd/api
+ARG VERSION=0.0.0
+ARG GIT_COMMIT=unknown
+
+# CGO_ENABLED=0 produces a static binary with no libc dependency, which is
+# what allows the distroless runtime stage below. Without it the binary needs
+# a C library that the static image does not have, and the container exits
+# immediately with an error that does not name the cause.
+#
+# -trimpath removes local filesystem paths from the binary. They are build-
+# machine detail that would otherwise ship to production.
+#
+# -ldflags "-s -w" strips the symbol table and DWARF debug information.
+#
+# Version and commit are injected as variables rather than compiled from a
+# file, so the same source produces a correctly labelled binary.
+RUN CGO_ENABLED=0 GOOS=linux go build \
+        -trimpath \
+        -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${GIT_COMMIT}" \
+        -o /out/app \
+        "${MAIN_PACKAGE}"
+
+
+# --------------------------------------------------------------------------
+# Runtime stage
+# --------------------------------------------------------------------------
+# Distroless static: no shell, no package manager, no libc. A compromised
+# process has almost nothing to work with — the tools an attacker would
+# reach for after achieving code execution are simply not present.
+#
+# The `:nonroot` tag runs as uid 65532 by default.
+#
+# CONSEQUENCE: there is no shell, so a `HEALTHCHECK` cannot use `curl` or
+# `wget`. See the health check note below.
+FROM gcr.io/distroless/static-debian12:nonroot AS final
+
+ARG VERSION=0.0.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIMESTAMP=unknown
+ARG REPOSITORY_URL=unknown
+
+LABEL org.opencontainers.image.title="go-api" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_TIMESTAMP}" \
+      org.opencontainers.image.source="${REPOSITORY_URL}" \
+      org.opencontainers.image.vendor="TBD"
+
+COPY --from=build /out/app /app/app
+
+USER nonroot:nonroot
+WORKDIR /app
+
+# Above 1024, because a non-root process cannot bind lower.
+ENV APP_PORT=8080
+EXPOSE 8080
+
+# NO HEALTHCHECK INSTRUCTION.
+#
+# Distroless has no shell and no HTTP client, so the usual
+# `HEALTHCHECK CMD curl ...` cannot run. Three options, in order of
+# preference:
+#
+#   1. Health-check from OUTSIDE the container — the deployment polls
+#      /health/ready, and monitoring scrapes /health/live. This is what the
+#      CD standard already requires, so no container health check is needed.
+#
+#   2. Build a tiny health-check binary into the image and use it:
+#        HEALTHCHECK CMD ["/app/healthcheck"]
+#      Adds one static binary, no shell, no package manager.
+#
+#   3. Switch the runtime stage to `alpine` and install `wget`. This gives
+#      back a shell and a package manager, which is precisely what
+#      distroless removes.
+#
+# TBD — which is adopted. Option 1 is recommended: the deployment already
+# polls readiness, and adding a container health check duplicates it while
+# weakening the runtime image.
+
+ENTRYPOINT ["/app/app"]

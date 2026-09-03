@@ -44,10 +44,6 @@ Trivy configuration, ignore policy, secret-scanning configuration, and SBOM gene
 
 ## Trivy Scope
 
----
-
-## Trivy Scope
-
 - filesystem vulnerabilities
 - container image vulnerabilities
 - dependency vulnerabilities

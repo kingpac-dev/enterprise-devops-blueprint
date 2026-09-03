@@ -24,8 +24,9 @@ Platform engineers, infrastructure engineers, and operations.
 | --- | --- | --- |
 | [infrastructure-standard.md](infrastructure-standard.md) | Host OS baseline, filesystem layout, Docker daemon configuration, users, hardening | Draft |
 | [server-sizing-guideline.md](server-sizing-guideline.md) | Growth drivers per component, starting figures, what to monitor from day one | Draft |
-| [platform-installation-strategy.md](platform-installation-strategy.md) | Install order with per-step verification, and the ADR-0009 gap | Draft |
+| [platform-installation-strategy.md](platform-installation-strategy.md) | Install order with per-step verification | Draft |
 | [high-availability-roadmap.md](high-availability-roadmap.md) | Current single points of failure, what removes each, cost, and what justifies it | Draft |
+| [database-standard.md](database-standard.md) | PostgreSQL on a dedicated host: separation, credentials, connections, backup, monitoring, access | Draft |
 
 ## Reading Order
 
@@ -33,6 +34,7 @@ Platform engineers, infrastructure engineers, and operations.
 2. [server-sizing-guideline.md](server-sizing-guideline.md) — how big, and what makes it grow
 3. [platform-installation-strategy.md](platform-installation-strategy.md) — the order things go in
 4. [high-availability-roadmap.md](high-availability-roadmap.md) — what is knowingly accepted, and what would change it
+5. [database-standard.md](database-standard.md) — the component whose loss is least recoverable
 
 ## Findings Worth Reviewing First
 
@@ -44,6 +46,8 @@ Platform engineers, infrastructure engineers, and operations.
 | **Install Harbor before Jenkins**, and **back up before the first pipeline.** Backing up an empty platform is the only time the first restore test is cheap | [platform-installation-strategy.md](platform-installation-strategy.md#2-order-and-why) |
 | Two installation checks are **negative tests**: a runtime credential must fail to push, and an existing tag must fail to be overwritten. Both confirm a control is real rather than intended | [platform-installation-strategy.md](platform-installation-strategy.md#4-step-2--harbor) |
 | The four cheapest availability improvements — restore testing, heartbeat, backups, a host-local image cache — **add no components** and none requires the platform to be complete | [high-availability-roadmap.md](high-availability-roadmap.md#4-order-by-value-per-cost) |
+| **The application database is the one thing not reproducible from source.** The blueprint's recovery mechanism — redeploy the previous image — does not reach it, and its backup does not yet exist | [database-standard.md](database-standard.md#1-the-database-is-not-a-container) |
+| The account the application runs as should not hold `CREATE`, `ALTER`, or `DROP`. A separate migration account costs a grant statement and means an application defect cannot drop a table | [database-standard.md](database-standard.md#3-credentials) |
 
 ---
 
@@ -69,6 +73,8 @@ Production sizing must consider workload, storage, redundancy, availability, bac
 - `TBD` — storage capacity and growth assumptions for Harbor
 - `TBD` — OS baseline and patching cadence
 - `TBD` — whether observability shares Server 2 or is separated
+- `TBD` — **application database backup, retention, and WAL archiving.** It does not exist, and it is the one thing not reproducible from source
+- `TBD` — data classification, which sets the requirements above it
 
 ---
 

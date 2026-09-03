@@ -40,6 +40,7 @@ Not everything needs backing up to the same degree, and the distinction determin
 
 | Item | Class | Why |
 | --- | --- | --- |
+| **Application database** | **Irreplaceable** | **Application data exists nowhere else. Unlike images, it is not reproducible from source at all** |
 | Jenkins credentials | Irreplaceable | Secret values exist nowhere else |
 | Harbor image storage | **Reproducible-but-different** | A rebuild produces a different artifact — see below |
 | Deployment and audit records | Irreplaceable | The record of what happened |
@@ -70,11 +71,18 @@ Everything reproducible depends on its source being version-controlled. That is 
 | Grafana | Dashboards, data sources, users | `TBD` | `TBD` |
 | Loki data | Log history | `TBD` | `TBD` |
 | Deployment configuration | Compose files, environment files | `TBD` | `TBD` |
+| **Application database (PostgreSQL)** | **The organization's application data** | `TBD` | `TBD` |
 | Application named volumes | Whatever durable state services hold | `TBD` | `TBD` |
 | Deployment and change records | Audit evidence | `TBD` | `TBD` |
 | Host configuration | OS config, Docker daemon config, firewall rules | `TBD` | `TBD` |
 
-Two rows are frequently missed.
+### The application database is the most consequential entry
+
+Container images are reproducible from source, if imperfectly. **Application data is not reproducible from anything.**
+
+It is therefore the backup whose absence is unrecoverable, and it needs point-in-time recovery rather than periodic full backups alone — the realistic database disaster is a migration or a defect that corrupted data at a known moment, not a lost host. See [database-standard.md](../02-infrastructure/database-standard.md#5-backup--now-the-most-important-backup-in-the-system).
+
+Three rows are frequently missed.
 
 **Application named volumes.** Every named volume in production is a backup obligation, and volumes are added without anyone updating the backup scope. The mismatch surfaces during a recovery. See [docker-compose-standard.md](../06-container/docker-compose-standard.md#6-volumes).
 

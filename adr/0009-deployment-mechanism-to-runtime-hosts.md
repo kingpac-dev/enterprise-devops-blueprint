@@ -2,13 +2,15 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Proposed — decision required** |
+| Status | **Superseded by ADR-0010** |
 | Date | 2026-08-16 |
 | Deciding role | `TBD` — platform owner, with security and network input |
 | Supersedes | None |
-| Superseded by | None |
+| Superseded by | [ADR-0010](0010-portainer-gitops-deployment.md) |
 
-> **This ADR does not record a decision. It records the options, their trade-offs, and the questions that must be answered to choose.** It exists so a pending decision is a reviewable artifact rather than a note repeated across several documents.
+> **DECIDED — see [ADR-0010](0010-portainer-gitops-deployment.md).** Pull-based deployment via Portainer GitOps was chosen (option C, implemented through Portainer Stacks synchronizing from Git). This document is retained because its option analysis remains the record of what was considered and why.
+>
+> **This ADR records no decision of its own. It records the options, their trade-offs, and the questions that had to be answered to choose.** It exists so a pending decision is a reviewable artifact rather than a note repeated across several documents.
 
 ---
 

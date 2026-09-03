@@ -13,7 +13,8 @@
 // after the build, as the generic template implies, produces an analysis
 // with no results — and the gate then passes on nothing.
 //
-// BLOCKED BY ADR-0009: Deploy, health verification, and rollback.
+// DEPLOYMENT IS PULL-BASED. This pipeline does not connect to any
+// runtime host. See adr/0010 and deploy-gitops.sh.
 // =========================================================================
 
 pipeline {
@@ -248,36 +249,74 @@ pipeline {
         }
 
         // -----------------------------------------------------------------
-        // BLOCKED BY ADR-0009.
+        // -----------------------------------------------------------------
+        // DEPLOY — pull-based. See adr/0010 and
+        // docs/05-ci-cd/deployment-repository-standard.md
         //
-        // For an API, health verification polls the READINESS endpoint —
-        // not liveness. Liveness answers a question about the process;
-        // readiness answers whether it can serve traffic, which is what a
-        // deployment needs to know.
-        stage('Deploy and verify') {
-            when { expression { return false } }
+        // This pipeline does NOT connect to a runtime host. It updates the
+        // desired state in the deployment repository, asks Portainer to
+        // synchronize, and WAITS FOR CONVERGENCE.
+        //
+        // The wait is the part a push model does not need. Without it the
+        // pipeline cannot answer "did it deploy?", and rollback has no
+        // trigger. deploy-gitops.sh reverts the desired state on timeout.
+        //
+        // [LIBRARY CANDIDATE] — identical in every pipeline.
+        // -----------------------------------------------------------------
+        stage('Deploy DEV') {
+            when {
+                allOf {
+                    environment name: 'PROMOTABLE', value: 'true'
+                    branch 'develop'
+                }
+            }
             steps {
-                echo 'BLOCKED — adr/0009: deployment mechanism undecided.'
+                withCredentials([
+                    string(credentialsId: 'deploy-repo-token', variable: 'DEPLOY_REPO_TOKEN'),
+                    string(credentialsId: 'portainer-webhook-dev', variable: 'PORTAINER_WEBHOOK')
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+
+                        # Confirms the RUNNING version, not what Portainer
+                        # believes. The `version` label is already required on
+                        # every service's metrics, so this adds no new surface
+                        # and works for workers as well as APIs.
+                        # TBD — Prometheus URL.
+                        export VERSION_PROBE="curl -sf \"${PROMETHEUS_URL}/api/v1/query?query=up{service=\\"${APP_NAME}\\",environment=\\"dev\\"}\" | jq -r '.data.result[0].metric.version // empty'"
+
+                        sh ./deploy-gitops.sh                           --service     "${APP_NAME}"                           --version     "${IMAGE_TAG}"                           --environment dev
+                    '''
+                }
+            }
+            post {
+                failure {
+                    // Exit 3 means it rolled back; exit 4 means the rollback
+                    // ALSO failed and the desired state is wrong.
+                    echo 'Deployment did not converge. Check whether the rollback succeeded — see docs/09-operations/rollback-runbook.md'
+                }
             }
         }
 
+        // -----------------------------------------------------------------
+        // MIGRATION — runs BEFORE the desired state is updated.
+        //
+        // This is option A in docs/05-ci-cd/database-migration-standard.md:
+        // migrate, then release the version that needs it. A failed migration
+        // means the tag is never committed, so NOTHING DEPLOYS — rather than
+        // deploying and then breaking.
+        //
+        // CONSEQUENCE OF PULL-BASED DEPLOYMENT: between this stage and
+        // Portainer converging, the PREVIOUS application version runs against
+        // the NEW schema. That window is inherent to the model and is never
+        // zero, so every migration must be backward compatible.
+        // Expand/contract is structural here, not advisory.
+        // -----------------------------------------------------------------
         stage('Database migration') {
-            when { expression { return false } }
+            when { expression { return false } }   // TBD — tooling undecided
             steps {
-                echo '''
-                    TBD — migration tooling, ownership, and execution stage.
-
-                    A migration the previous version cannot run against makes
-                    ROLLBACK UNAVAILABLE: redeploying the previous image
-                    leaves old code against a new schema.
-
-                    Requirements before this stage is enabled:
-                      - expand/contract migrations, so each step is reversible
-                      - backup verified before destructive changes
-                      - the rollback limitation stated in the release notes,
-                        BEFORE approval — not discovered during a failed
-                        deployment
-                '''
+                echo 'TBD — see docs/05-ci-cd/database-migration-standard.md. Before enabling: migration tooling chosen; a SEPARATE migration account holding CREATE/ALTER/DROP, used only by this stage; backup taken and VERIFIED for destructive changes; lock timeout set; migration class and rollback limitation stated in the release notes BEFORE approval.'
             }
         }
     }

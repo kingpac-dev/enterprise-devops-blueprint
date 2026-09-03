@@ -14,7 +14,7 @@ Platform engineers, release approvers, and developers.
 
 ## Status
 
-**Draft for review.** The **deployment mechanism is undecided** — see section 8. Everything else in this document is independent of that decision.
+**Draft for review.** The deployment mechanism is **decided and implemented** — pull-based via Portainer GitOps, [ADR-0010](../../adr/0010-portainer-gitops-deployment.md), executed by [deploy-gitops.sh](../../templates/jenkins/deploy-gitops.sh). Section 8 records what that changed.
 
 ---
 
@@ -152,35 +152,32 @@ See [audit-evidence.md](../10-governance/audit-evidence.md). The deployment reco
 
 ---
 
-## 8. Blocked: The Deployment Mechanism
+## 8. The Deployment Mechanism, and What It Changed
 
-**How the pipeline reaches runtime hosts is undecided.** Everything above is independent of it; the execution of the Deploy step is not.
+**Decided: pull-based via Portainer GitOps** — [ADR-0010](../../adr/0010-portainer-gitops-deployment.md). Everything above is independent of that choice; the execution of the Deploy step is not.
 
-See [ADR-0009](../../adr/0009-deployment-mechanism-to-runtime-hosts.md).
+The pipeline **never connects to a runtime host**. It commits the new tag to the deployment repository, calls the Portainer webhook, and waits — see [deployment-repository-standard.md](deployment-repository-standard.md).
 
-| Option | Deploy step becomes | Effect on this standard |
-| --- | --- | --- |
-| **A** — Jenkins agent on host | A job step executed on the target agent | None. Flow unchanged |
-| **B** — SSH over internal network | A remote command from the controller | None. Flow unchanged |
-| **C** — Pull-based agent | An update to a desired-state source; the host converges | **Material.** See below |
-| **D** — Portainer API | An API call | None to the flow; dissolves a governance boundary. Not recommended |
+The options considered are in [ADR-0009](../../adr/0009-deployment-mechanism-to-runtime-hosts.md). The one chosen — pull-based — is the only one that materially changed this standard, and the change is below.
 
-### Option C changes this standard
+### Deployment is asynchronous, and that changes this standard
 
-Under a pull model, deployment is **asynchronous**. The pipeline updates the desired state and the host converges at its own pace.
+The pipeline updates the desired state; the host converges at its own pace.
 
 Consequences that must be designed rather than discovered:
 
-| Property | Under A, B, D | Under C |
+| Property | Push model | **Pull model, in use** |
 | --- | --- | --- |
-| Pipeline knows the deployment happened | Immediately | Needs an explicit feedback path |
-| Health verification | Runs in the pipeline after deploy | Must wait for convergence first, or move elsewhere |
-| Automatic rollback on failed verification | The pipeline reverts | The pipeline reverts the **desired state**; the host converges back |
-| "Deploy now" | Direct | Bounded by the polling interval |
+| Pipeline knows the deployment happened | Immediately | **Needs an explicit feedback path** |
+| Health verification | Runs after deploy | **Must wait for convergence first** |
+| Automatic rollback on failed verification | The pipeline reverts the deployment | The pipeline reverts the **desired state**; the host converges back |
+| "Deploy now" | Direct | Prompt via webhook; otherwise bounded by the polling interval |
 
-Without a feedback path, health verification has nothing to verify and automatic rollback cannot trigger. Option C is a stronger security posture and it requires this work.
+Without a feedback path, health verification has nothing to verify and automatic rollback cannot trigger. **That path is now implemented**: [deploy-gitops.sh](../../templates/jenkins/deploy-gitops.sh) polls until the running version matches the desired one, and reverts the desired state on timeout.
 
-`TBD` — if option C is chosen, the feedback mechanism and the convergence timeout become part of this standard.
+The probe it uses queries the `version` label already required on every service's metrics, so it verifies the **running process** rather than what Portainer believes, and works identically for workers, which have no HTTP endpoint to poll.
+
+`TBD` — the probe per environment. **Without it the script warns and exits successfully, so the deployment's outcome is unknown and records as success.**
 
 ---
 
@@ -188,7 +185,9 @@ Without a feedback path, health verification has nothing to verify and automatic
 
 | Item | Blocks |
 | --- | --- |
-| `TBD` — **deployment mechanism** ([ADR-0009](../../adr/0009-deployment-mechanism-to-runtime-hosts.md)) | The Deploy step; section 8 |
+| ~~deployment mechanism~~ **decided and implemented** ([ADR-0010](../../adr/0010-portainer-gitops-deployment.md)) | — |
+| `TBD` — `VERSION_PROBE` per environment | Whether convergence is verified at all |
+| `TBD` — the deployment repository itself | Every deploy step |
 | `TBD` — production approver role | Approval |
 | `TBD` — UAT trigger and approval | Section 3 |
 | `TBD` — health verification timeout per application type | Section 5 |

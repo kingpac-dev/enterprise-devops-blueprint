@@ -19,6 +19,8 @@ Scanner configuration per application type and the settings that make the Qualit
 | File | Target | Status |
 | --- | --- | --- |
 | [sonar-project.properties.angular](sonar-project.properties.angular) | Angular applications | Draft |
+| [sonar-project.properties.react-vite](sonar-project.properties.react-vite) | React + TypeScript + Vite | Draft |
+| [sonar-project.properties.go](sonar-project.properties.go) | Go | Draft |
 | [sonar-project.properties.dotnet](sonar-project.properties.dotnet) | .NET API and Worker projects | Draft |
 | [quality-gate-baseline.md](quality-gate-baseline.md) | Recommended gate conditions, the reasoning, and how to introduce a gate | Draft |
 
@@ -43,10 +45,6 @@ This depends on SonarQube identifying new code, which requires branch or pull-re
 | No credential in any template | Confirmed — the analysis token is referenced, never embedded |
 | **Analysis executed against a real SonarQube** | **Not run — no SonarQube available in this environment** |
 | **Property names against the installed scanner version** | **Not verified** |
-
----
-
-## Configuration Expectations
 
 ---
 

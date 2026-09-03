@@ -45,6 +45,21 @@ Version impact:
 - Repository hygiene files `.gitignore` and `.gitattributes` to reduce the risk of committing secrets, environment files, and build output.
 - ADR template at `adr/adr-template.md` implementing the format required by `AGENTS.md`.
 
+### Decided — deployment mechanism
+
+`adr/0010-portainer-gitops-deployment.md` records the decision that `adr/0009` set out the options for: **deployment is pull-based**, with Portainer Stacks synchronizing from a Git repository. The pipeline publishes to Harbor, commits the new image tag to a deployment repository, and calls a Portainer webhook. Nothing connects to a runtime host.
+
+Two consequences were found while writing it:
+
+- **Portainer Community Edition cannot force an image re-pull** — it is a Business Edition feature. A `latest` tag therefore redeploys the **old** image while reporting success. Immutable tags are not merely good practice on this platform; they are what makes deployment function at all.
+- **Deployment is asynchronous**, so health verification and automatic rollback need an explicit convergence feedback path. That work does not yet exist.
+
+### Added — application types
+
+`AGENTS.md` now names the five application types the organization actually builds: Angular, React with TypeScript and Vite, .NET Web API, Go with Fiber, and .NET Worker Service. It previously named three, which did not match reality — and a policy naming stacks nobody uses invites readers to conclude the whole repository is irrelevant to their work.
+
+Templates added for the two uncovered types: `Dockerfile.react-vite` with its nginx configuration and runtime-config script, `Dockerfile.go-fiber` on distroless, matching Jenkinsfiles, SonarQube properties, and ignore rules.
+
 ### Decided
 
 The repository structure in `AGENTS.md` contains three pairs of directories that could hold overlapping content. To prevent the duplication that `AGENTS.md` warns against, the following boundaries were reviewed and confirmed. Each is documented in the affected directory's `README.md`.

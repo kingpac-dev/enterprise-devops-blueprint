@@ -13,10 +13,9 @@
 // patterns that were predicted rather than used. The stages marked
 // [LIBRARY CANDIDATE] are the ones to factor out when that time comes.
 //
-// STAGES BLOCKED BY ADR-0009: Deploy, Health verification, and Rollback
-// cannot be written until the deployment mechanism is decided. They are
-// present as explicit stubs so their position in the flow is fixed and the
-// gap is visible, rather than absent and forgotten.
+// DEPLOYMENT IS PULL-BASED — adr/0010. The deploy step updates the
+// desired state in the deployment repository and waits for convergence;
+// it never connects to a runtime host. See deploy-gitops.sh.
 // =========================================================================
 
 pipeline {
@@ -324,74 +323,70 @@ pipeline {
         }
 
         // =================================================================
-        // BLOCKED BY ADR-0009 — deployment mechanism undecided
-        // =================================================================
-        // These stages are stubs so their position in the flow is fixed and
-        // the gap stays visible. Each option in ADR-0009 changes how they
-        // are implemented, and the direction of the connection is what
-        // determines the firewall design:
+        // DEPLOY — pull-based. adr/0010, and
+        // docs/05-ci-cd/deployment-repository-standard.md
         //
-        //   A  Jenkins agent on the host   — this pipeline runs the deploy
-        //                                    step ON the target agent
-        //   B  SSH over internal network   — sshagent / sshCommand from here
-        //   C  Pull-based agent            — this pipeline updates a desired
-        //                                    -state source; the host converges.
-        //                                    Deployment becomes asynchronous,
-        //                                    so health verification and the
-        //                                    rollback decision need an
-        //                                    explicit feedback path
-        //   D  Portainer API               — NOT RECOMMENDED. Dissolves the
-        //                                    governance boundary that says
-        //                                    Portainer is not a deployment path
+        // Nothing here connects to a runtime host. deploy-gitops.sh updates
+        // the desired state in the deployment repository, calls the Portainer
+        // webhook, and WAITS FOR CONVERGENCE.
+        //
+        // The wait is the whole difference from a push model. Without it the
+        // pipeline cannot answer "did it deploy?", and rollback has nothing to
+        // trigger on. The script reverts the desired state on timeout, which
+        // is the rollback.
+        //
+        // The script also records the previous version BEFORE changing
+        // anything — determining a rollback target afterwards, from a system
+        // that may already be failing, is how rollbacks get stuck.
+        //
+        // [LIBRARY CANDIDATE] — identical in every pipeline.
         // =================================================================
-
-        stage('Record known-good version') {
-            when { expression { return false } }   // BLOCKED — ADR-0009
-            steps {
-                echo '''
-                    BLOCKED — adr/0009.
-
-                    Must run BEFORE deployment. Determining the rollback
-                    target afterwards, from a system that may already be
-                    failing, is how rollbacks get stuck.
-
-                    Must also verify the recorded image still EXISTS in
-                    Harbor. Retention that evicted it means the rollback
-                    fails at the moment it is needed, having appeared
-                    configured and correct until then.
-                '''
-            }
-        }
-
         stage('Deploy DEV') {
-            when { expression { return false } }   // BLOCKED — ADR-0009
+            when {
+                allOf {
+                    environment name: 'PROMOTABLE', value: 'true'
+                    branch 'develop'
+                }
+            }
             steps {
-                echo 'BLOCKED — adr/0009. Deploy the published image; do not rebuild.'
+                withCredentials([
+                    string(credentialsId: 'deploy-repo-token', variable: 'DEPLOY_REPO_TOKEN'),
+                    string(credentialsId: 'portainer-webhook-dev', variable: 'PORTAINER_WEBHOOK')
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+
+                        # Confirms the RUNNING version, not what Portainer
+                        # believes. The `version` label is already required on
+                        # every service's metrics, so this adds no new surface
+                        # and works for workers as well as for APIs.
+                        # TBD — Prometheus URL, and the probe per environment.
+                        export VERSION_PROBE="curl -sf \"${PROMETHEUS_URL}/api/v1/query?query=up{service=\\\"${APP_NAME}\\\",environment=\\\"dev\\\"}\" | jq -r .data.result[0].metric.version"
+
+                        sh ./deploy-gitops.sh \
+                          --service     "${APP_NAME}" \
+                          --version     "${IMAGE_TAG}" \
+                          --environment dev
+                    '''
+                }
+            }
+            post {
+                failure {
+                    // Exit 3 = rolled back. Exit 4 = the rollback ALSO failed
+                    // and the desired state names a version that does not come
+                    // up. Exit 4 needs a person.
+                    echo 'Deployment did not converge. Confirm whether the rollback succeeded — docs/09-operations/rollback-runbook.md'
+                }
             }
         }
 
-        stage('Health verification') {
-            when { expression { return false } }   // BLOCKED — ADR-0009
-            steps {
-                echo '''
-                    BLOCKED — adr/0009.
-
-                    Poll the readiness endpoint until healthy or timeout.
-                    Readiness, not liveness: liveness answers a question
-                    about the process, readiness answers whether it can
-                    serve traffic.
-
-                    On failure: restore the recorded known-good version,
-                    verify recovery, record failure evidence, notify.
-
-                    "Where technically safe" does real work here. A release
-                    containing an irreversible migration cannot be rolled
-                    back by redeploying the previous image — the old code
-                    fails against the new schema. That limitation must have
-                    been recorded before approval, not discovered now.
-                '''
-            }
-        }
+        // UAT and PROD use the same step with a different --environment and
+        // webhook credential. PROD additionally requires approval, which under
+        // this model is the pull request against prod/ in the deployment
+        // repository — see docs/05-ci-cd/deployment-repository-standard.md
+        //
+        // TBD — whether the pipeline opens that pull request, or a human does.
     }
 
     // ---------------------------------------------------------------------

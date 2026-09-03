@@ -1,15 +1,12 @@
 // =========================================================================
-// Jenkinsfile — Angular application.
+// Jenkinsfile — React + TypeScript + Vite application.
 //
-// Complete and runnable. Differs from Jenkinsfile.template only in the
-// Restore / Lint / Build / Test / Analysis stages; see that file for the
-// rationale behind the shared stages.
+// Complete and runnable. See Jenkinsfile.template for the rationale behind
+// the shared stages.
 //
-// The duplication between the four templates is deliberate and temporary.
-// A Jenkins Shared Library is Phase 5 work — see Jenkinsfile.template.
-//
-// DEPLOYMENT IS PULL-BASED. This pipeline does not connect to any
-// runtime host. See adr/0010 and deploy-gitops.sh.
+// DEPLOYMENT IS PULL-BASED. This pipeline does not connect to any runtime
+// host. It publishes the image, then commits the new tag to the deployment
+// repository and calls the Portainer webhook. See adr/0010.
 // =========================================================================
 
 pipeline {
@@ -25,13 +22,13 @@ pipeline {
     }
 
     environment {
-        APP_NAME       = 'orders-web'                        // ADJUST
-        HARBOR_URL     = 'harbor.example.internal'           // TBD
-        HARBOR_PROJ    = 'my-team'                           // TBD
+        APP_NAME       = 'mes-web'                            // ADJUST
+        HARBOR_URL     = 'harbor.example.internal'            // TBD
+        HARBOR_PROJ    = 'my-team'                            // TBD
         SONAR_HOST     = 'https://sonarqube.example.internal' // TBD
-        TRIVY_SEVERITY = 'HIGH,CRITICAL'                     // TBD
-        // npm writes here; keeps the cache inside the workspace so it is
-        // removed by cleanWs() rather than shared between builds.
+        SONAR_KEY      = 'mes-web'                            // ADJUST
+        TRIVY_SEVERITY = 'HIGH,CRITICAL'                      // TBD
+        DEPLOY_REPO    = 'https://github.com/ORG/DEPLOY-REPO.git'  // TBD
         npm_config_cache = "${WORKSPACE}/.npm"
     }
 
@@ -69,11 +66,6 @@ pipeline {
             }
         }
 
-        // -----------------------------------------------------------------
-        // `npm ci` installs the lockfile exactly and fails if it disagrees
-        // with package.json. `npm install` may resolve differently and
-        // rewrite the lockfile — so the same commit would produce different
-        // dependency sets on different days.
         stage('Restore dependencies') {
             steps {
                 sh '''
@@ -83,11 +75,15 @@ pipeline {
             }
         }
 
-        stage('Lint') {
+        stage('Lint and type-check') {
             steps {
+                // Type-checking is a separate step from building. `vite build`
+                // does NOT type-check by default — esbuild strips types
+                // without validating them, so a type error can ship.
                 sh '''
                     set -eu
                     npm run lint
+                    npx tsc --noEmit
                 '''
             }
         }
@@ -96,14 +92,8 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    npm run test -- \
-                      --watch=false \
-                      --browsers=ChromeHeadless \
-                      --code-coverage
+                    npm run test -- --run --coverage
                 '''
-                // Coverage measures which lines executed, not whether
-                // anything was asserted about them. A high number on
-                // shallow component tests is not evidence of testing.
             }
             post {
                 always {
@@ -114,27 +104,29 @@ pipeline {
 
         stage('Build') {
             steps {
+                // NO VITE_* variables passed here.
+                //
+                // Anything supplied as VITE_* is compiled into the bundle,
+                // which would produce a different artifact per environment
+                // and break build-once promotion. Environment values are
+                // written to config.json at container start instead.
                 sh '''
                     set -eu
-                    npm run build -- --configuration=production
+                    npm run build
                 '''
-                // Nothing environment-specific is compiled in. Configuration
-                // is written to assets/config.json at container start —
-                // see templates/docker/runtime-config.angular.sh
             }
         }
 
-        // -----------------------------------------------------------------
         stage('Static analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
-                    // set +x so the token is not echoed into the build log.
                     sh '''
                         set +x
                         set -eu
                         npx sonar-scanner \
                           -Dsonar.host.url="${SONAR_HOST}" \
                           -Dsonar.token="${SONAR_TOKEN}" \
+                          -Dsonar.projectKey="${SONAR_KEY}" \
                           -Dsonar.projectVersion="${VERSION}"
                     '''
                 }
@@ -149,16 +141,13 @@ pipeline {
             }
         }
 
-        // -----------------------------------------------------------------
         stage('Dependency and secret scan') {
             steps {
                 sh '''
                     set -eu
                     trivy fs --config trivy.yaml \
                       --scanners vuln,secret,misconfig \
-                      --severity "${TRIVY_SEVERITY}" \
-                      --exit-code 1 \
-                      .
+                      --severity "${TRIVY_SEVERITY}" --exit-code 1 .
                 '''
             }
         }
@@ -168,13 +157,11 @@ pipeline {
                 sh '''
                     set -eu
                     docker build \
-                      --build-arg APP_NAME="${APP_NAME}" \
                       --build-arg VERSION="${VERSION}" \
                       --build-arg GIT_COMMIT="${GIT_COMMIT_SHORT}" \
                       --build-arg BUILD_TIMESTAMP="${BUILD_TIMESTAMP}" \
                       --build-arg REPOSITORY_URL="${GIT_URL}" \
-                      --tag "${IMAGE_REF}" \
-                      .
+                      --tag "${IMAGE_REF}" .
                 '''
             }
         }

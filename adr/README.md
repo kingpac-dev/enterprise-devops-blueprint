@@ -10,7 +10,7 @@ Decisions that adopt, replace, or remove a platform component, or that change th
 
 ## Status
 
-**Nine ADRs written. All are `Proposed`.**
+**Ten ADRs written.** Nine are `Proposed`; ADR-0009 is superseded by ADR-0010, which records the deployment decision.
 
 None is `Accepted`, because no deciding role has been assigned and no review has taken place. Marking them accepted would claim an approval that has not happened — see [devops-governance.md](../docs/10-governance/devops-governance.md#2-roles).
 
@@ -28,15 +28,16 @@ None is `Accepted`, because no deciding role has been assigned and no review has
 | [0006-use-prometheus-grafana-loki.md](0006-use-prometheus-grafana-loki.md) | Prometheus, Grafana, and Loki as the observability stack | Proposed |
 | [0007-use-immutable-container-versioning.md](0007-use-immutable-container-versioning.md) | Immutable, traceable image identifiers; `latest` never used for production | Proposed |
 | [0008-production-manual-approval.md](0008-production-manual-approval.md) | Manual approval gate before production deployment | Proposed |
-| [0009-deployment-mechanism-to-runtime-hosts.md](0009-deployment-mechanism-to-runtime-hosts.md) | **Decision required** — how the pipeline reaches runtime hosts | **Proposed — open** |
+| [0009-deployment-mechanism-to-runtime-hosts.md](0009-deployment-mechanism-to-runtime-hosts.md) | Options for how the pipeline reaches runtime hosts | **Superseded by 0010** |
+| [0010-portainer-gitops-deployment.md](0010-portainer-gitops-deployment.md) | **Pull-based deployment via Portainer GitOps.** Decides 0009 | Proposed |
 
 ADRs 0001 to 0008 represent **blueprint decisions** made when this repository was established. They record what was decided and why; they do not record historical debates that did not take place. Alternatives were assessed analytically against stated constraints, not through proofs of concept or benchmarking, and each ADR says so.
 
-## ADR-0009 Is Different
+## ADR-0009 and ADR-0010
 
-It records **no decision**. It sets out five options, assesses them against the constraints, and lists the six questions the organization must answer to choose.
+ADR-0009 recorded **no decision**. It set out five options, assessed them, and listed the six questions the organization had to answer — because a pending decision is more useful as a reviewable artifact than as a note repeated across the standards it blocks.
 
-It exists because the decision blocks six documents and all of Phase 2, and a pending decision is more useful as a reviewable artifact than as a note repeated across the standards it blocks.
+**ADR-0010 decides it:** pull-based deployment through Portainer Stacks synchronizing from Git. ADR-0009 is retained rather than deleted, because its option analysis is the record of what was considered and why.
 
 ## What Reviewers Should Look For
 
@@ -52,7 +53,8 @@ Each ADR's **Negative Consequences** and **Alternatives Considered** sections ca
 | 0006 | A single Prometheus is a single point of failure for **detection**, and its failure is silent |
 | 0007 | Retention becomes a reliability control: an evicted image means rollback fails when needed |
 | 0008 | Approval fatigue produces rubber-stamping, which is invisible from the record — a rubber-stamped approval looks identical to a considered one |
-| 0009 | Option D (Portainer API) is cheapest and dissolves a governance boundary the rest of the blueprint depends on |
+| 0009 | Option D (Portainer API push) is cheapest and dissolves a governance boundary the rest of the blueprint depends on |
+| 0010 | **Portainer CE cannot force an image re-pull** — it is a Business Edition feature. A `latest` tag therefore redeploys the OLD image while reporting success. Immutable tags are not merely good practice here; they are what makes deployment work at all |
 
 ---
 

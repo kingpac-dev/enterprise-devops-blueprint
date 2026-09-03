@@ -27,7 +27,23 @@ The initial platform architecture is based on:
 - Grafana for dashboards
 - Loki for centralized logging
 
-The design must allow future evolution toward Kubernetes, GitOps, Argo CD, Vault, policy-as-code, and an internal developer platform without forcing premature adoption.
+The design must allow future evolution toward Kubernetes, Argo CD, Vault, policy-as-code, and an internal developer platform without forcing premature adoption.
+
+GitOps is no longer future work: deployment is pull-based, with Portainer Stacks synchronizing from a Git repository. See [ADR-0010](adr/0010-portainer-gitops-deployment.md).
+
+### Supported Application Types
+
+The organization builds and delivers the following. Every standard in this repository applies to all of them equally.
+
+| Type | Stack |
+| --- | --- |
+| Frontend | **Angular** |
+| Frontend | **React with TypeScript and Vite** |
+| API | **.NET Web API** — multiple versions in use |
+| API | **Go, using Fiber** |
+| Worker | **.NET Worker Service** |
+
+Standards are technology-independent: they define what must happen, not what it is written in. Templates in `templates/` are technology-specific and exist only to save each team writing the same Dockerfile and pipeline from scratch. **An application type with no template is still governed by every standard here** — it simply needs its own build files, written to satisfy them.
 
 ---
 
