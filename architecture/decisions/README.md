@@ -10,7 +10,17 @@ Option comparisons, evaluation matrices, benchmark notes, cost or capacity analy
 
 ## Status
 
-**Skeleton.** No material published yet.
+**Published.** Supporting analyses published for core platform decisions.
+
+---
+
+## Published Analyses
+
+| Supporting Document | Target ADR | Topic |
+| --- | --- | --- |
+| [adr-0002-harbor-registry-comparison.md](adr-0002-harbor-registry-comparison.md) | [ADR-0002](../../adr/0002-use-harbor-as-container-registry.md) | Harbor vs Nexus vs Artifactory vs Docker Registry comparative evaluation |
+| [adr-0005-runtime-platform-options.md](adr-0005-runtime-platform-options.md) | [ADR-0005](../../adr/0005-use-docker-compose-for-initial-runtime.md) | Docker Compose + Portainer vs Kubernetes vs Nomad evaluation |
+| [adr-0010-gitops-convergence-analysis.md](adr-0010-gitops-convergence-analysis.md) | [ADR-0010](../../adr/0010-portainer-gitops-deployment.md) | Portainer GitOps polling loop, convergence lag, and rollback failure modes |
 
 ---
 

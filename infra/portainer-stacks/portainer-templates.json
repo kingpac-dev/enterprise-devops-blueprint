@@ -1,0 +1,100 @@
+{
+  "version": "3",
+  "templates": [
+    {
+      "type": 3,
+      "title": "Enterprise DevOps Platform (All-in-One)",
+      "description": "Complete CI/CD & Observability toolchain: Jenkins LTS (JCasC), SonarQube LTS + PostgreSQL, Prometheus, Grafana, Loki, Promtail, cAdvisor, Node Exporter, and Nginx Gateway.",
+      "note": "Requires at least 8 GB RAM (16 GB recommended) and vm.max_map_count >= 262144 on the host.",
+      "categories": [
+        "devops",
+        "ci-cd",
+        "monitoring"
+      ],
+      "platform": "linux",
+      "logo": "https://portainer-io-assets.s3.amazonaws.com/logos/jenkins.png",
+      "repository": {
+        "url": "https://github.com/kingpac-dev/enterprise-devops-blueprint",
+        "stackfile": "infra/portainer-stacks/stack-devops-all-in-one.yml"
+      },
+      "env": [
+        {
+          "name": "PLATFORM_DOMAIN",
+          "label": "Platform Domain",
+          "default": "devops.local"
+        },
+        {
+          "name": "JENKINS_ADMIN_PASSWORD",
+          "label": "Jenkins Admin Password",
+          "default": "AdminStrongPass2026!"
+        },
+        {
+          "name": "SONAR_DB_PASSWORD",
+          "label": "SonarQube DB Password",
+          "default": "SonarSecureDbPassword2026!"
+        },
+        {
+          "name": "GRAFANA_ADMIN_PASSWORD",
+          "label": "Grafana Admin Password",
+          "default": "GrafanaStrongPassword2026!"
+        }
+      ]
+    },
+    {
+      "type": 3,
+      "title": "DevOps Core Toolchain (Jenkins + SonarQube)",
+      "description": "Jenkins Controller LTS with zero-build automated plugins & JCasC + SonarQube LTS with PostgreSQL 15.",
+      "note": "Requires at least 6 GB RAM.",
+      "categories": [
+        "devops",
+        "ci-cd"
+      ],
+      "platform": "linux",
+      "logo": "https://portainer-io-assets.s3.amazonaws.com/logos/jenkins.png",
+      "repository": {
+        "url": "https://github.com/kingpac-dev/enterprise-devops-blueprint",
+        "stackfile": "infra/portainer-stacks/stack-core-devops.yml"
+      },
+      "env": [
+        {
+          "name": "PLATFORM_DOMAIN",
+          "label": "Platform Domain",
+          "default": "devops.local"
+        },
+        {
+          "name": "JENKINS_ADMIN_PASSWORD",
+          "label": "Jenkins Admin Password",
+          "default": "JenkinsStrongPass123!"
+        },
+        {
+          "name": "SONAR_DB_PASSWORD",
+          "label": "SonarQube DB Password",
+          "default": "SonarStrongPass123!"
+        }
+      ]
+    },
+    {
+      "type": 3,
+      "title": "DevOps Observability Suite",
+      "description": "Full monitoring stack: Prometheus, Grafana, Loki, Promtail, cAdvisor, and Node Exporter.",
+      "note": "Pre-configures Prometheus scraping and Grafana datasources.",
+      "categories": [
+        "monitoring",
+        "logging"
+      ],
+      "platform": "linux",
+      "logo": "https://portainer-io-assets.s3.amazonaws.com/logos/grafana.png",
+      "repository": {
+        "url": "https://github.com/kingpac-dev/enterprise-devops-blueprint",
+        "stackfile": "infra/portainer-stacks/stack-observability.yml"
+      },
+      "env": [
+        {
+          "name": "GRAFANA_ADMIN_PASSWORD",
+          "label": "Grafana Admin Password",
+          "default": "GrafanaStrongPass123!"
+        }
+      ]
+    }
+  ]
+}

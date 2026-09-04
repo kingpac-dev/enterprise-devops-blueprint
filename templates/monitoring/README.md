@@ -22,6 +22,10 @@ Scrape configuration, alert rules, and dashboard definitions. Observability poli
 | [alert-rules.example.yml](alert-rules.example.yml) | 4 recording rules and 13 alerts, including the heartbeat | Draft |
 | [grafana-dashboard-service.json](grafana-dashboard-service.json) | Per-service dashboard, 11 panels | Draft |
 | [loki-labels.md](loki-labels.md) | Label-versus-field split and cardinality guidance | Draft |
+| [dead-mans-snitch.md](dead-mans-snitch.md) | Standard for external watchdog probe to prevent silent monitoring failure | Published |
+| [heartbeat-probe.sh](heartbeat-probe.sh) | Executable probe script for pinging external snitch service | Published |
+| [alertmanager.example.yml](alertmanager.example.yml) | Production Alertmanager configuration with routing, inhibit rules, and Slack/Teams/Pager receivers | Published |
+| [alertmanager-templates.md](alertmanager-templates.md) | Channel guidance and rich message templates for Slack, Teams, and email | Published |
 
 ## The Heartbeat Is the Most Important Rule
 
@@ -29,7 +33,7 @@ A broken alerting path produces exactly the same signal as a healthy platform: *
 
 `Heartbeat` always fires, and is routed to a watcher that expects it on a schedule. Its **absence** is the alarm.
 
-The watcher must be **outside** this stack. A heartbeat evaluated by Prometheus and delivered through the same alerting path proves nothing when the failure is Prometheus or that path. `TBD` — the external watcher; without it, detection failure is undetectable.
+The watcher must be **outside** this stack. A heartbeat evaluated by Prometheus and delivered through the same alerting path proves nothing when the failure is Prometheus or that path. See [dead-mans-snitch.md](dead-mans-snitch.md) and [heartbeat-probe.sh](heartbeat-probe.sh) for the implementation pattern.
 
 ## Dashboard Design Decisions
 

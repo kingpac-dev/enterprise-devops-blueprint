@@ -1,0 +1,64 @@
+# ==============================================================================
+# Enterprise DevOps Blueprint — Harbor S3-Compatible Object Storage Config
+# ==============================================================================
+# This configuration replaces local Docker volume storage with enterprise-grade,
+# highly available S3-compatible object storage (AWS S3, MinIO, Ceph, Dell ECS).
+#
+# References:
+#   - docs/06-container/harbor-standard.md
+#   - runbooks/harbor-storage.md
+#   - ADR-0002: Use Harbor as Container Registry
+# ==============================================================================
+
+# In Harbor's harbor.yml configuration file, locate the `storage_service` block
+# and configure the s3 backend as follows:
+
+storage_service:
+  # Supported drivers: filesystem, s3, azure, gcs, swift, oss
+  s3:
+    # Target S3 bucket name (must be pre-created with private ACL)
+    bucket: enterprise-devops-harbor-registry
+
+    # AWS / S3 Access Credentials
+    # NOTE: In production, inject via environment variables or IAM Instance Profile.
+    # Never commit active credentials to source control.
+    accesskey: "${HARBOR_S3_ACCESS_KEY}"
+    secretkey: "${HARBOR_S3_SECRET_KEY}"
+
+    # Target S3 Region (e.g. ap-southeast-1, us-east-1)
+    region: ap-southeast-1
+
+    # Custom S3 Endpoint (Required for MinIO, Ceph, or Local S3; leave blank for AWS S3)
+    # Example for internal MinIO: https://minio.storage.internal:9000
+    regionendpoint: ""
+
+    # Enforce HTTPS for data in transit
+    secure: true
+
+    # Enable V4 signature authentication (Required for modern S3 & MinIO)
+    v4auth: true
+
+    # Chunk and multipart upload thresholds
+    # Chunksize: 10MB (optimal balance between memory usage and throughput)
+    chunksize: 10485760
+
+    # Root directory prefix inside the bucket
+    rootdirectory: /registry
+
+    # Storage Class configuration (e.g. STANDARD, INTELLIGENT_TIERING)
+    storageclass: STANDARD
+
+    # Multipart copy settings
+    multipartcopythreshold: 33554432  # 32 MB
+    multipartcopychunksize: 33554432   # 32 MB
+    multipartcopymaxconcurrency: 5     # Parallel parts
+
+# ==============================================================================
+# Disaster Recovery & Bucket Lifecycle Rules:
+# ==============================================================================
+# 1. Bucket Versioning: ENABLED (protects against accidental blob deletion)
+# 2. Server-Side Encryption (SSE-S3 or SSE-KMS): MANDATORY
+# 3. Object Retention: Aligned with standards/naming-conventions.md &
+#    docs/06-container/image-retention-policy.md
+# 4. Cross-Region Replication (CRR): Recommended for critical disaster recovery
+# ==============================================================================

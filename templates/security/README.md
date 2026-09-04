@@ -18,10 +18,11 @@ Trivy configuration, ignore policy, secret-scanning configuration, and SBOM gene
 
 | File | Intent | Status |
 | --- | --- | --- |
-| [trivy.yaml](trivy.yaml) | Scan types, blocking severity, exit behaviour, database policy | Draft |
-| [.trivyignore.example](.trivyignore.example) | Ignore-entry format with justification, compensating control, approver, and expiry | Draft |
-| [secret-scanning.md](secret-scanning.md) | Where scanning runs, the response procedure, false positives, what it does not cover | Draft |
-| [sbom-generation.md](sbom-generation.md) | Commands, storage independent of image retention, querying, limitations | Draft |
+| [trivy.yaml](trivy.yaml) | Scan types, blocking severity, exit behaviour, database policy | Published |
+| [.trivyignore.example](.trivyignore.example) | Ignore-entry format with justification, compensating control, approver, and expiry | Published |
+| [secret-scanning.md](secret-scanning.md) | Where scanning runs, the response procedure, false positives, what it does not cover | Published |
+| [sbom-generation.md](sbom-generation.md) | Commands, storage independent of image retention, querying, limitations | Published |
+| [vault/](vault/) | HashiCorp Vault integration guide, AppRole auth, and Vault Agent config | Published |
 
 ## Three Points Worth Reading Before Adopting
 

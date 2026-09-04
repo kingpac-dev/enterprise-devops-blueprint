@@ -20,13 +20,14 @@ Pipeline definitions and shared-library usage patterns. The rules these pipeline
 
 | File | Target | Stages | Status |
 | --- | --- | --- | --- |
-| [deploy-gitops.sh](deploy-gitops.sh) | **The deploy step.** Shared by every pipeline | — | Draft, **tested** |
-| [Jenkinsfile.template](Jenkinsfile.template) | Generic reference, heavily commented | 15 | Draft |
-| [Jenkinsfile.angular](Jenkinsfile.angular) | Angular applications | 14 | Draft |
-| [Jenkinsfile.react-vite](Jenkinsfile.react-vite) | React + TypeScript + Vite | 14 | Draft |
-| [Jenkinsfile.go-fiber](Jenkinsfile.go-fiber) | Go Fiber APIs | 15 | Draft |
-| [Jenkinsfile.dotnet-api](Jenkinsfile.dotnet-api) | .NET Web APIs | 15 | Draft |
-| [Jenkinsfile.dotnet-worker](Jenkinsfile.dotnet-worker) | .NET Worker Services | 14 | Draft |
+| [deploy-gitops.sh](deploy-gitops.sh) | **The deploy step.** Shared by every pipeline | — | Published, **tested** |
+| [Jenkinsfile.template](Jenkinsfile.template) | Generic reference, heavily commented | 15 | Published |
+| [Jenkinsfile.angular](Jenkinsfile.angular) | Angular applications | 14 | Published |
+| [Jenkinsfile.react-vite](Jenkinsfile.react-vite) | React + TypeScript + Vite | 14 | Published |
+| [Jenkinsfile.go-fiber](Jenkinsfile.go-fiber) | Go Fiber APIs | 15 | Published |
+| [Jenkinsfile.dotnet-api](Jenkinsfile.dotnet-api) | .NET Web APIs | 15 | Published |
+| [Jenkinsfile.dotnet-worker](Jenkinsfile.dotnet-worker) | .NET Worker Services | 14 | Published |
+| [shared-library/](shared-library/) | Enterprise Shared Library with reusable steps and pipeline wrapper | — | Published |
 
 Each is complete and runnable on its own. Two stages remain deliberately disabled with `when { expression { return false } }` so the gap stays visible in the stage view rather than absent and forgotten: **image signing** (Phase 3, not adopted) and **database migration** (tooling undecided).
 

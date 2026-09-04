@@ -23,6 +23,7 @@ Engineering management, platform owners, security, and auditors.
 | File | Intent | Status |
 | --- | --- | --- |
 | [devops-governance.md](devops-governance.md) | Roles, decision rights, separation of duties, standard ownership, the platform/team boundary, escalation, governance metrics | Draft |
+| [raci-matrix.md](raci-matrix.md) | Formal RACI role matrix, organizational functional mapping, and escalation workflows | Published |
 | [change-management.md](change-management.md) | Three change classes, the reclassification problem, change records, manual changes, post-deployment verification, failed changes | Draft |
 | [production-access-policy.md](production-access-policy.md) | Access as five tiers rather than a binary, request and review, emergency access, session recording, data access boundary | Draft |
 | [exception-management.md](exception-management.md) | What requires an exception, what it records, approval, expiry enforcement, the register, what cannot be excepted | Draft |

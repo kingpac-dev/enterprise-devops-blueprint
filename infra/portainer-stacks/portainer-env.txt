@@ -1,0 +1,41 @@
+# ==============================================================================
+# Portainer Stack Environment Variables
+# Copy and paste this directly into Portainer UI:
+# Portainer -> Stacks -> Add stack -> Environment variables -> "Advanced / Text"
+# ==============================================================================
+
+PLATFORM_DOMAIN=devops.local
+
+# Jenkins Configuration
+JENKINS_IMAGE=jenkins/jenkins:2.440.3-lts-jdk17
+JENKINS_ADMIN_USER=admin
+JENKINS_ADMIN_PASSWORD=AdminStrongPass2026!
+JENKINS_HTTP_PORT=8080
+JENKINS_AGENT_PORT=50000
+
+# SonarQube & PostgreSQL Configuration
+SONARQUBE_VERSION=10.4.1-community
+SONAR_DB_USER=sonar
+SONAR_DB_PASSWORD=SonarSecureDbPassword2026!
+SONAR_DB_NAME=sonar
+SONARQUBE_PORT=9000
+
+# Observability Configuration
+PROMETHEUS_VERSION=v2.51.0
+PROMETHEUS_PORT=9090
+GRAFANA_VERSION=10.4.0
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=GrafanaStrongPassword2026!
+GRAFANA_PORT=3000
+LOKI_VERSION=2.9.6
+LOKI_PORT=3100
+PROMTAIL_VERSION=2.9.6
+CADVISOR_VERSION=v0.49.1
+CADVISOR_PORT=8082
+NODE_EXPORTER_VERSION=v1.7.0
+NODE_EXPORTER_PORT=9100
+
+# Harbor Registry Integration (Optional / External)
+HARBOR_ROBOT_USER=robot$jenkins-ci
+HARBOR_ROBOT_SECRET=ReplaceWithHarborRobotSecret
+SONAR_AUTH_TOKEN=ReplaceWithSonarQubeToken

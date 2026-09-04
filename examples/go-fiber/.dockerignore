@@ -1,0 +1,6 @@
+.git
+.gitignore
+*.md
+.vscode
+bin/
+coverage.out

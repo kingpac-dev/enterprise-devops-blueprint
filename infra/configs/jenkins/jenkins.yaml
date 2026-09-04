@@ -1,0 +1,62 @@
+# ==============================================================================
+# Enterprise DevOps Blueprint — Jenkins Configuration as Code (JCasC)
+# Implements: docs/05-ci-cd/jenkins-architecture.md
+# ==============================================================================
+
+jenkins:
+  systemMessage: "Enterprise DevOps Blueprint — Governed CI/CD Controller"
+  numExecutors: 2
+  mode: NORMAL
+  scmCheckoutRetryCount: 3
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${JENKINS_ADMIN_USER:-admin}"
+          password: "${JENKINS_ADMIN_PASSWORD:-AdminStrongPassword123!}"
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  crumbIssuer:
+    standard:
+      excludeClientIPFromCrumb: false
+
+  remotingSecurity:
+    enabled: true
+
+unclassified:
+  location:
+    url: "https://jenkins.${PLATFORM_DOMAIN:-devops.local}/"
+    adminAddress: "devops-platform@${PLATFORM_DOMAIN:-devops.local}"
+
+  sonarGlobalConfiguration:
+    buildWrapperEnabled: true
+    installations:
+      - name: "SonarQube"
+        serverUrl: "http://sonarqube:9000"
+        credentialsId: "sonarqube-token"
+        additionalProperties: ""
+
+  prometheusConfiguration:
+    collectingMetricsPeriodInSeconds: 120
+    path: "prometheus"
+    useAuthenticatedEndpoint: false
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: "harbor-robot-creds"
+              username: "${HARBOR_ROBOT_USER:-robot$jenkins-ci}"
+              password: "${HARBOR_ROBOT_SECRET:-ChangeMeRobotSecret!}"
+              description: "Harbor Container Registry Robot Account"
+          - string:
+              scope: GLOBAL
+              id: "sonarqube-token"
+              secret: "${SONAR_AUTH_TOKEN:-ChangeMeSonarToken!}"
+              description: "SonarQube Server Analysis Token"

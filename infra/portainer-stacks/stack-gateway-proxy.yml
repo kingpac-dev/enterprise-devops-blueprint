@@ -1,0 +1,89 @@
+# ==============================================================================
+# Portainer Stack — Edge Ingress Gateway & TLS Reverse Proxy
+# Compatibility: Portainer.io CE/EE (Stacks -> Add Stack -> Web Editor / Git)
+# Includes: Nginx Reverse Proxy with automated routing
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  nginx-gateway:
+    image: nginx:1.25-alpine
+    container_name: devops-gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - platform-net
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cat << 'EOF' > /etc/nginx/conf.d/default.conf
+        server {
+            listen 80;
+            server_name _;
+
+            client_max_body_size 2048M;
+
+            # Healthcheck probe
+            location /healthz {
+                return 200 "OK\n";
+                add_header Content-Type text/plain;
+            }
+
+            # Jenkins Routing
+            location /jenkins/ {
+                proxy_pass http://devops-jenkins:8080/;
+                proxy_set_header Host $$host;
+                proxy_set_header X-Real-IP $$remote_addr;
+                proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $$http_upgrade;
+                proxy_set_header Connection "upgrade";
+            }
+
+            # SonarQube Routing
+            location /sonar/ {
+                proxy_pass http://devops-sonarqube:9000/;
+                proxy_set_header Host $$host;
+                proxy_set_header X-Real-IP $$remote_addr;
+                proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            }
+
+            # Grafana Routing
+            location /grafana/ {
+                proxy_pass http://devops-grafana:3000/;
+                proxy_set_header Host $$host;
+                proxy_set_header X-Real-IP $$remote_addr;
+                proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            }
+
+            # Default Landing
+            location / {
+                return 200 "Enterprise DevOps Platform Gateway\nAvailable: /jenkins/, /sonar/, /grafana/\n";
+                add_header Content-Type text/plain;
+            }
+        }
+        EOF
+        exec nginx -g "daemon off;"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  platform-net:
+    name: devops-platform-net
+    external: true
