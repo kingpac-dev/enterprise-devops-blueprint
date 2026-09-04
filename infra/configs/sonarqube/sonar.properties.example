@@ -1,0 +1,32 @@
+# ==============================================================================
+# Enterprise DevOps Blueprint — SonarQube Server Configuration
+# Implements: docs/02-infrastructure/platform-installation-strategy.md
+# ==============================================================================
+
+# Database Connection (PostgreSQL)
+sonar.jdbc.username=sonar
+sonar.jdbc.password=ReplaceWithSecureDbPassword123!
+sonar.jdbc.url=jdbc:postgresql://sonarqube-db:5432/sonar
+
+# Database connection pool tuning
+sonar.jdbc.maxActive=60
+sonar.jdbc.maxIdle=10
+sonar.jdbc.minIdle=2
+sonar.jdbc.maxWait=5000
+
+# Web Server Configuration
+sonar.web.host=0.0.0.0
+sonar.web.port=9000
+sonar.web.context=
+
+# Elasticsearch JVM Heap (Recommended: 1-2GB for Community LTS)
+sonar.search.javaOpts=-Xmx1G -Xms1G -XX:+HeapDumpOnOutOfMemoryError
+
+# Compute Engine JVM Heap
+sonar.ce.javaOpts=-Xmx1G -Xms1G -XX:+HeapDumpOnOutOfMemoryError
+
+# Web Server JVM Heap
+sonar.web.javaOpts=-Xmx1G -Xms512m -XX:+HeapDumpOnOutOfMemoryError
+
+# Security & Force Authentication
+sonar.forceAuthentication=true

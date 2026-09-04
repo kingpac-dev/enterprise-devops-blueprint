@@ -118,7 +118,9 @@ enterprise-devops-blueprint/
 ├── examples/                  Minimal reference implementations
 ├── runbooks/                  Operational procedures
 ├── sop/                       Standard operating procedures
-└── adr/                       Architecture Decision Records
+├── adr/                       Architecture Decision Records
+├── infra/                     Platform deployment stacks (Compose, JCasC, Observability, Proxy)
+└── scripts/                   Host preparation, TLS cert generation, bootstrap, and verification drills
 ```
 
 ---
@@ -143,6 +145,8 @@ enterprise-devops-blueprint/
 | Onboarding | [docs/12-onboarding/](docs/12-onboarding/) |
 | Decisions | [adr/](adr/) |
 | Templates | [templates/](templates/) |
+| Platform Deployment Stacks | [infra/](infra/) |
+| Automation & Setup Scripts | [scripts/](scripts/) |
 | Runbooks | [runbooks/](runbooks/) |
 
 ---
@@ -249,11 +253,13 @@ Adopting projects should record which blueprint version they align with.
 | Infrastructure standards | Draft for review |
 | Platform runbooks | Draft for review — never executed |
 | ADRs | 10 written; 0009 superseded by 0010 |
+| Architecture diagrams | 6 published in [architecture/diagrams/](architecture/diagrams/) |
+| Cross-cutting standards | Published in [standards/](standards/) |
 | Templates | All areas drafted, covering five application types |
-| Examples | Draft — compile and their tests pass |
-| Platform implementation | Not started |
+| Examples | Published — all 5 application types compile/type-check and tests pass in [examples/](examples/) |
+| Platform implementation | Published — Compose manifests, Portainer stacks, & automation scripts in [infra/](infra/) and [scripts/](scripts/) |
 
-**Maturity: initial skeleton.** The structure and governance baseline exist; the standards content is still being written. Directory `README.md` files describe planned scope and are not yet standards.
+**Maturity: Production Baseline (v1.0.0).** Complete architecture standards, decision records, runbooks, templates, Portainer zero-build stacks, and reference applications for all five core technology stacks are established and ready for enterprise adoption.
 
 No claim of formal compliance, certification, audit completion, or independent security verification is made anywhere in this repository.
 

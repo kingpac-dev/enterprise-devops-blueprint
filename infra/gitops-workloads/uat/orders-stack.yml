@@ -1,0 +1,62 @@
+# ==============================================================================
+# Portainer GitOps Stack — Orders Application (UAT Environment)
+# Implements: adr/0010-portainer-gitops-deployment.md
+#             docs/05-ci-cd/deployment-repository-standard.md
+# ==============================================================================
+
+name: orders-workload-uat
+
+services:
+  orders-api:
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/orders-api:${ORDERS_API_VERSION:?ORDERS_API_VERSION is required}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__Default: "${DB_CONNECTION_STRING:?DB_CONNECTION_STRING is required}"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}"
+      Serilog__MinimumLevel__Default: Information
+    ports:
+      - "8081:8080"
+    networks:
+      - uat-app-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/healthz"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  orders-worker:
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/orders-worker:${ORDERS_WORKER_VERSION:?ORDERS_WORKER_VERSION is required}
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Staging
+      ConnectionStrings__Default: "${DB_CONNECTION_STRING:?DB_CONNECTION_STRING is required}"
+      WorkerOptions__PollingIntervalSeconds: "10"
+    networks:
+      - uat-app-net
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  uat-app-net:
+    driver: bridge

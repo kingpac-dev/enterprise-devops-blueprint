@@ -1,0 +1,17 @@
+# ==============================================================================
+# Enterprise DevOps Blueprint — Grafana Auto-Provisioned Dashboards
+# Implements: docs/08-observability/dashboard-standard.md
+# ==============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: 'DevOps Platform Dashboards'
+    orgId: 1
+    folder: 'Platform'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

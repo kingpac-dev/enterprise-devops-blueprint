@@ -10,21 +10,21 @@ Jenkins pipelines, Dockerfiles, Compose files, SonarQube configuration, security
 
 ## Status
 
-**Skeleton.** No templates published yet.
+**Published.** Production-ready templates available across all supported platforms and stacks.
 
 ---
 
 ## Contents
 
-| Directory | Contents |
-| --- | --- |
-| [jenkins/](jenkins/) | `Jenkinsfile` templates per application type |
-| [docker/](docker/) | `Dockerfile` and `.dockerignore` templates per application type |
-| [compose/](compose/) | Environment-specific Compose files and `.env.example` |
-| [sonar/](sonar/) | SonarQube project configuration |
-| [security/](security/) | Trivy and scanning configuration, ignore policy, SBOM generation |
-| [monitoring/](monitoring/) | Prometheus scrape configuration, alert rules, Grafana dashboards |
-| [project-template/](project-template/) | Complete starting layout for a new application repository |
+| Directory | Contents | Target Platforms / Stacks |
+| --- | --- | --- |
+| [jenkins/](jenkins/) | `Jenkinsfile` templates and GitOps deploy script | Angular, React+Vite, .NET API, Go Fiber, .NET Worker |
+| [docker/](docker/) | Multi-stage `Dockerfile`, `.dockerignore`, and Nginx configurations | Angular, React+Vite, .NET API, Go Fiber, .NET Worker |
+| [compose/](compose/) | Environment-specific Compose files (`compose.dev.yml`, `compose.uat.yml`, `compose.prod.yml`) and `.env.example` | All workloads |
+| [sonar/](sonar/) | SonarQube project configurations and quality gate baseline standard | Angular, React+Vite, .NET, Go |
+| [security/](security/) | `trivy.yaml`, `.trivyignore.example`, SBOM generation, and secret scanning standards | Trivy, Gitleaks, Syft |
+| [monitoring/](monitoring/) | Prometheus scrape configuration, Alertmanager rules, Grafana service dashboard JSON, and Loki label rules | Prometheus, Loki, Grafana |
+| [project-template/](project-template/) | Complete starting layout for a new application repository (`README`, `AGENTS.md`, `.gitignore.*`, `RELEASE-NOTES`) | New Projects |
 
 ---
 

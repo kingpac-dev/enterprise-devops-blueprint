@@ -1,0 +1,80 @@
+# ==============================================================================
+# Portainer GitOps Stack — Orders Application (PROD Environment)
+# Implements: adr/0007-use-immutable-container-versioning.md
+#             adr/0008-production-manual-approval.md
+#             adr/0010-portainer-gitops-deployment.md
+#             docs/06-container/docker-compose-standard.md
+# ==============================================================================
+
+name: orders-workload-prod
+
+services:
+  orders-api:
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/orders-api:${ORDERS_API_VERSION:?ORDERS_API_VERSION must be an immutable release tag}
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__Default: "${DB_CONNECTION_STRING:?DB_CONNECTION_STRING is required}"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}"
+      Serilog__MinimumLevel__Default: Warning
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks:
+      - prod-frontend-net
+      - prod-backend-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  orders-worker:
+    image: ${HARBOR_URL:?HARBOR_URL is required}/${HARBOR_PROJECT:?HARBOR_PROJECT is required}/orders-worker:${ORDERS_WORKER_VERSION:?ORDERS_WORKER_VERSION must be an immutable release tag}
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__Default: "${DB_CONNECTION_STRING:?DB_CONNECTION_STRING is required}"
+      WorkerOptions__PollingIntervalSeconds: "10"
+    networks:
+      - prod-backend-net
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  prod-frontend-net:
+    driver: bridge
+  prod-backend-net:
+    internal: true
+    driver: bridge

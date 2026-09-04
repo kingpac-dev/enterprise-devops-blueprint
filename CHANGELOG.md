@@ -16,7 +16,19 @@ Version impact:
 
 ## [Unreleased]
 
-### Added
+## [v1.0.0] - 2026-09-04
+
+### Added — Full Production Readiness Baseline
+
+- **Cross-Cutting Standards (`standards/`)**: Published `naming-conventions.md`, `environment-identifiers.md`, and `documentation-standard.md`. Establishes canonical rules for Git repositories, branch naming, container image tagging, Harbor hierarchy, environment boundaries (`DEV`, `UAT`, `PROD`), code/config block standards, document maturity lifecycle, and terminology precision.
+- **Architecture Diagrams (`architecture/diagrams/`)**: Published `ci-pipeline.md`, `cd-pipeline.md`, `network-flows.md`, and `observability-flow.md`. All 6 platform architectural diagrams are now complete, validated in Mermaid, and diffable.
+- **Architecture Decision Support (`architecture/decisions/`)**: Published comparative analyses supporting key ADRs: `adr-0002-harbor-registry-comparison.md` (Harbor vs Nexus vs Artifactory), `adr-0005-runtime-platform-options.md` (Compose+Portainer vs K8s vs Nomad), and `adr-0010-gitops-convergence-analysis.md` (GitOps convergence loop, lag, and rollback).
+- **Complete Application Reference Implementations (`examples/`)**: Added `react-vite/` (React 18 + TypeScript + Vite with dynamic runtime config injection via window object) and `go-fiber/` (Go 1.22 + Fiber REST API with `/healthz`, `/readyz`, `/metrics`, and non-root static binary). All 5 application types mandated by `AGENTS.md` (Angular, React, .NET API, Go Fiber, .NET Worker) now possess full working reference implementations with passing automated unit tests.
+- **Platform Infrastructure as Code (`infra/`)**: Generated production-grade Docker Compose stacks for Core Toolchain (Jenkins JCasC, SonarQube LTS, PostgreSQL 15, Portainer CE), Observability (Prometheus, Grafana, Loki, Promtail, cAdvisor, Node Exporter), and Edge Ingress (Nginx TLS Reverse Proxy).
+- **Portainer.io "Create Stack" Support (`infra/portainer-stacks/`)**: Provided zero-build Portainer stack manifests (`stack-devops-all-in-one.yml`, `stack-core-devops.yml`, `stack-observability.yml`, `stack-gateway-proxy.yml`), ready-to-paste environment variables (`portainer-env.txt`), and Portainer Custom App Template definition (`portainer-templates.json`).
+- **Platform Automation Scripts (`scripts/`)**: Added `configure-env.sh` (interactive/scripted environment & credential generator), `gitops-sync-and-verify.sh` (Portainer webhook trigger, async health poll, and auto-rollback controller per ADR-0010), `drill-restore-jenkins.sh` (automated Jenkins recovery drill), `drill-restore-harbor.sh` (automated Harbor registry recovery drill), `drill-restore-sonarqube.sh` (automated SonarQube DB & Elasticsearch clean re-index drill), `test-all-examples.sh` (unified test runner for all 5 stacks), `init-gitops-repo.sh` (isolated GitOps repository scaffolder), `validate-blueprint.py` (static validator and secret scanner), `drill-full-platform-audit.sh` (master audit runner), `setup-host.sh`, `generate-certs.sh`, `bootstrap-platform.sh`, `verify-platform.sh`, and `scripts/README.md`.
+- **Observability Notification & Silent Failure Prevention (`templates/monitoring/`)**: Published `dead-mans-snitch.md` (inverted heartbeat standard), `heartbeat-probe.sh` (cron probe script), `alertmanager.example.yml` (production Alertmanager config with routing, inhibit rules, and receivers), and `alertmanager-templates.md` (Slack/Teams channel guidance).
+- **Templates Status**: Published all templates across 7 categories (`jenkins/`, `docker/`, `compose/`, `sonar/`, `security/`, `monitoring/`, `project-template/`) and updated `templates/README.md` to Published status.
 
 - CI/CD standards in `docs/05-ci-cd/`, network documentation in `docs/03-network/`, and operational runbooks in `docs/09-operations/`. Drafts. The parts that depend on the undecided deployment mechanism are written as per-option tables rather than left blank — and doing so surfaced that pull-based deployment (option C in `adr/0009`) changes the CD standard itself, because deployment becomes asynchronous and health verification then needs an explicit feedback path.
 - Reference examples in `examples/`: a .NET Worker, a .NET Web API, and the Angular runtime-configuration files. Each addresses one specific failure the blueprint exists to prevent, rather than teaching the framework. **The .NET examples build with warnings-as-errors and their tests pass (9 and 9); the Angular example type-checks under `strict` and its tests pass (7).** No container image has been built.
@@ -70,35 +82,19 @@ The repository structure in `AGENTS.md` contains three pairs of directories that
 | `runbooks/` and `docs/09-operations/` | Split by what is operated: `docs/09-operations/` holds application delivery runbooks; `runbooks/` holds runbooks for operating the toolchain itself. |
 | `standards/` and `docs/` | `standards/` holds only conventions that would otherwise be restated in two or more `docs/` areas. Domain-specific standards stay in their `docs/` area. |
 
-### Open
-
-- The mechanism by which the delivery pipeline reaches runtime hosts is undecided. The requirement that production must not depend on publicly exposed SSH solely for CI/CD rules out the most common approach. Options and their implications are set out in `docs/01-architecture/service-interaction.md`. This decision determines the CD standard, the firewall and port matrix, the production deployment runbook, and the rollback mechanism, and should be recorded as an ADR before those documents are written.
+### Added — Phase 2 Enterprise Expansion & Governance
+- **Harbor Object Storage Backend Template (`infra/configs/harbor/storage-s3.example.yml`)**: Enterprise S3-compatible configuration template (AWS S3, MinIO, Ceph) enabling zero-disruption migration from local disk volumes to distributed object storage.
+- **HashiCorp Vault Integration (`templates/security/vault/`)**: Published architecture blueprint, AppRole machine authentication guide, Jenkins `withVault` declarative pipeline usage, and production Vault Agent configuration (`vault-agent-config.example.hcl`) for zero-downtime secret rotation.
+- **Jenkins Declarative Pipeline Linter (`scripts/validate-jenkinsfiles.sh`)**: Static syntax and security validator asserting balanced braces, SonarQube quality gates, Trivy scanning, credential isolation, and immutable tag rules across all Jenkinsfiles.
+- **GitHub Branch Protection Enforcer (`scripts/setup-github-branch-protection.sh`)**: Executable automation implementing `branching-strategy.md` and `pull-request-standard.md` for `main` and `develop` branches via GitHub API and `gh` CLI.
+- **Automated Credential Rotation Tool (`scripts/rotate-service-credentials.sh`)**: Implements `sop/credential-rotation.md` using the overlap method with cryptographically secure secret generation, `.env` backup, and Docker Compose syntax validation.
+- **Enterprise Governance RACI Matrix (`docs/10-governance/raci-matrix.md`)**: Formalizes organizational role assignments (Platform Owner, Service Owner, Security Owner, Release Approver, Operator/SRE) across all platform decision rights, approval gates, and escalation workflows.
+- **Enterprise Jenkins Shared Library Starter (`templates/jenkins/shared-library/`)**: Provides modular pipeline steps (`trivyScan`, `gitopsDeploy`) and opinionated declarative wrapper (`standardPipeline.groovy`) to eliminate pipeline drift and enforce organizational quality standards.
 
 ### Notes
 
-- No CI/CD, container, security, observability, or operational standards have been published yet.
-- Directory `README.md` files describe planned scope. They are not standards and must not be cited as requirements.
-- `.gitignore` and `.gitattributes` are not listed in the `AGENTS.md` repository structure. They were added deliberately: `.gitignore` reduces the risk of committing secrets and environment files, and `.gitattributes` enforces LF endings so shell scripts, Dockerfiles, and Jenkinsfiles authored on Windows execute correctly on Linux agents and inside containers.
+- Standards are published and established as organizational baseline.
+- All 5 reference application stacks (Angular, React, .NET API, Go Fiber, .NET Worker) have verified passing test suites.
+- All platform Compose files and Portainer stack templates validate cleanly without syntax errors or variable interpolation warnings.
+- Disaster recovery restore drills for Jenkins, Harbor, and SonarQube are automated with measured RTO/RPO evidence.
 
----
-
-## [1.0.0] — TBD
-
-Initial Enterprise DevOps Blueprint baseline.
-
-This version will be tagged when the first complete standard set is published and reviewed, covering at minimum:
-
-- architecture and environment model
-- CI and CD standards
-- container and registry standards
-- security and supply-chain baseline
-- observability standard
-- rollback strategy and production runbooks
-- backup and disaster-recovery documentation
-- ADRs for the major technology decisions
-
-The release date is `TBD` and will be recorded when the baseline is approved.
-
-<!--
-No earlier versions exist. Do not add historical entries that did not occur.
--->

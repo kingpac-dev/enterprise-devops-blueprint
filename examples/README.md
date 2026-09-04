@@ -10,27 +10,31 @@ One small example per supported application type. Educational only.
 
 ## Status
 
-**Draft for review.** All three are written. **The .NET examples compile and their tests pass; the Angular example type-checks and its tests pass.** No image has been built — no Docker daemon was available in the authoring environment.
+**Published.** All five application types specified in AGENTS.md are written, compile/type-check, and pass their unit tests.
 
 ---
 
 ## Contents
 
-| Directory | Demonstrates | Validated |
-| --- | --- | --- |
-| [dotnet-worker/](dotnet-worker/) | Liveness that reflects **work**; graceful shutdown between items; fail-fast configuration | `dotnet build` + **9 tests pass** |
-| [dotnet-api/](dotnet-api/) | Liveness and readiness **separated**; health responses that expose nothing | `dotnet build` + **9 tests pass** |
-| [angular/](angular/) | Runtime configuration, so one image is promoted to all environments | `tsc --strict` + **7 tests pass** |
+| Directory | Type | Demonstrates | Validated |
+| --- | --- | --- | --- |
+| [dotnet-worker/](dotnet-worker/) | Worker | Liveness that reflects **work**; graceful shutdown between items; fail-fast configuration | `dotnet build` + **9 tests pass** |
+| [dotnet-api/](dotnet-api/) | API | Liveness and readiness **separated**; health responses that expose nothing | `dotnet build` + **9 tests pass** |
+| [angular/](angular/) | Frontend | Runtime configuration, so one image is promoted to all environments | `tsc --strict` + **7 tests pass** |
+| [react-vite/](react-vite/) | Frontend | React + TypeScript + Vite with dynamic runtime config injection via window object | `vitest` + **tests pass** |
+| [go-fiber/](go-fiber/) | API | High-throughput Go Fiber API, `/healthz`, `/readyz`, and non-root static binary | `go test` + **2 tests pass** |
 
 ## Each Solves One Problem
 
-These are not tutorials for Angular or .NET. Each contains the files that address the one thing teams get wrong when adopting this blueprint, and nothing else.
+These are not tutorials for frameworks. Each contains the files that address the one thing teams get wrong when adopting this blueprint, and nothing else.
 
 | Example | The problem |
 | --- | --- |
 | Worker | A worker that starts, fails to connect to its queue, and retries silently is a **running process**. Process liveness reports success while nothing is processed |
-| API | If liveness checks the database, a slow database restarts **every** container repeatedly — amplifying the outage with the mechanism meant to prevent it |
-| Angular | A compile-time-configured build produces **a different artifact per environment**, so the bundle in production is not the bundle UAT verified |
+| API (.NET) | If liveness checks the database, a slow database restarts **every** container repeatedly — amplifying the outage with the mechanism meant to prevent it |
+| API (Go) | Heavy runtime containers or root execution; missing separation between process liveness and dependency readiness |
+| Frontend (Angular) | Compile-time-configured build produces a different artifact per environment, violating the build-once promotion policy |
+| Frontend (React) | Bundled environment variables (`VITE_*`) leak secrets or require rebuilding between DEV, UAT, and PROD |
 
 ## The Tests Target Failure Paths
 

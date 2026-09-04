@@ -1,0 +1,208 @@
+# ==============================================================================
+# Portainer Stack — Core DevOps Toolchain (Zero-Build Edition)
+# Compatibility: Portainer.io CE/EE (Stacks -> Add Stack -> Web Editor / Git)
+# Includes: Jenkins Controller LTS, SonarQube LTS, PostgreSQL 15
+# Implements: docs/01-architecture/enterprise-devops-architecture.md
+# ==============================================================================
+
+version: '3.8'
+
+services:
+
+  # ----------------------------------------------------------------------------
+  # 1. PostgreSQL Database for SonarQube
+  # ----------------------------------------------------------------------------
+  sonarqube-db:
+    image: postgres:15-alpine
+    container_name: devops-sonarqube-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${SONAR_DB_USER:-sonar}
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD:-SonarStrongPass123!}
+      POSTGRES_DB: ${SONAR_DB_NAME:-sonar}
+    volumes:
+      - sonarqube_pgdata:/var/lib/postgresql/data
+    networks:
+      - platform-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SONAR_DB_USER:-sonar} -d ${SONAR_DB_NAME:-sonar}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ----------------------------------------------------------------------------
+  # 2. SonarQube Server LTS
+  # ----------------------------------------------------------------------------
+  sonarqube:
+    image: sonarqube:${SONARQUBE_VERSION:-10.4.1-community}
+    container_name: devops-sonarqube
+    restart: unless-stopped
+    depends_on:
+      sonarqube-db:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_USERNAME: ${SONAR_DB_USER:-sonar}
+      SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:-SonarStrongPass123!}
+      SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/${SONAR_DB_NAME:-sonar}
+      SONAR_SEARCH_JAVAADDITIONALOPTS: "-Dnode.store.allow_mmap=true"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    networks:
+      - platform-net
+    ports:
+      - "${SONARQUBE_PORT:-9000}:9000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9000/api/system/status || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          memory: 3072M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ----------------------------------------------------------------------------
+  # 3. Jenkins Controller LTS (Zero-Build Auto-Bootstrapped)
+  # ----------------------------------------------------------------------------
+  jenkins:
+    image: ${JENKINS_IMAGE:-jenkins/jenkins:2.440.3-lts-jdk17}
+    container_name: devops-jenkins
+    restart: unless-stopped
+    user: root
+    environment:
+      JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:-admin}
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:-JenkinsStrongPass123!}
+      PLATFORM_DOMAIN: ${PLATFORM_DOMAIN:-devops.local}
+      HARBOR_ROBOT_USER: ${HARBOR_ROBOT_USER:-robot$$jenkins-ci}
+      HARBOR_ROBOT_SECRET: ${HARBOR_ROBOT_SECRET:-ChangeMeHarborSecret!}
+      SONAR_AUTH_TOKEN: ${SONAR_AUTH_TOKEN:-ChangeMeSonarToken!}
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false -Dorg.apache.commons.jelly.tags.core.expr.InstantExpression.CACHE_SIZE=1000"
+      CASC_JENKINS_CONFIG: "/var/jenkins_home/casc_configs/jenkins.yaml"
+    volumes:
+      - jenkins_data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - platform-net
+    ports:
+      - "${JENKINS_HTTP_PORT:-8080}:8080"
+      - "${JENKINS_AGENT_PORT:-50000}:50000"
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        set -e
+        echo "=== Enterprise DevOps Jenkins Bootstrapper ==="
+        mkdir -p /var/jenkins_home/casc_configs
+
+        # Write self-contained JCasC if not already present
+        cat << 'EOF' > /var/jenkins_home/casc_configs/jenkins.yaml
+        jenkins:
+          systemMessage: "Enterprise DevOps Blueprint — Portainer Managed CI/CD"
+          numExecutors: 2
+          mode: NORMAL
+          securityRealm:
+            local:
+              allowsSignup: false
+              users:
+                - id: "$${JENKINS_ADMIN_USER}"
+                  password: "$${JENKINS_ADMIN_PASSWORD}"
+          authorizationStrategy:
+            loggedInUsersCanDoAnything:
+              allowAnonymousRead: false
+          crumbIssuer:
+            standard:
+              excludeClientIPFromCrumb: false
+          remotingSecurity:
+            enabled: true
+        unclassified:
+          location:
+            url: "http://$${PLATFORM_DOMAIN}:8080/"
+            adminAddress: "admin@$${PLATFORM_DOMAIN}"
+          sonarGlobalConfiguration:
+            buildWrapperEnabled: true
+            installations:
+              - name: "SonarQube"
+                serverUrl: "http://sonarqube:9000"
+                credentialsId: "sonarqube-token"
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - usernamePassword:
+                      scope: GLOBAL
+                      id: "harbor-robot-creds"
+                      username: "$${HARBOR_ROBOT_USER}"
+                      password: "$${HARBOR_ROBOT_SECRET}"
+                      description: "Harbor Registry Credentials"
+                  - string:
+                      scope: GLOBAL
+                      id: "sonarqube-token"
+                      secret: "$${SONAR_AUTH_TOKEN}"
+                      description: "SonarQube Auth Token"
+        EOF
+
+        # Install pinned plugins on first boot
+        if [ ! -f /var/jenkins_home/.plugins_installed ]; then
+          echo "[INFO] Installing essential CI/CD plugins via jenkins-plugin-cli..."
+          jenkins-plugin-cli --plugins \
+            configuration-as-code:1775.v810dc950b_514 \
+            git:5.2.1 \
+            workflow-aggregator:596.v8c21c963d92d \
+            pipeline-stage-view:2.34 \
+            sonar:2.16.1 \
+            docker-workflow:572.v950f58993843 \
+            credentials-binding:681.vf91662a_32536 \
+            timestamper:1.26 \
+            prometheus:2.2.0 \
+            matrix-auth:3.2.2 || true
+          touch /var/jenkins_home/.plugins_installed
+        fi
+
+        echo "[INFO] Starting Jenkins Controller..."
+        exec /usr/bin/tini -s -- /usr/local/bin/jenkins.sh
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f -s http://127.0.0.1:8080/login > /dev/null || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 3072M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  platform-net:
+    name: devops-platform-net
+    driver: bridge
+
+volumes:
+  sonarqube_pgdata:
+    name: devops_sonarqube_pgdata
+  sonarqube_data:
+    name: devops_sonarqube_data
+  sonarqube_extensions:
+    name: devops_sonarqube_extensions
+  sonarqube_logs:
+    name: devops_sonarqube_logs
+  jenkins_data:
+    name: devops_jenkins_data

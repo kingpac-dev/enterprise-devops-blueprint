@@ -1,0 +1,52 @@
+# ==============================================================================
+# Enterprise DevOps Blueprint — Prometheus Alerting Rules
+# Implements: docs/08-observability/alerting-standard.md
+# ==============================================================================
+
+groups:
+  - name: platform_infrastructure_alerts
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} ({{ $labels.instance }}) is down"
+          description: "Target has been unreachable for more than 1 minute."
+
+      - alert: HostDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} * 100) / node_filesystem_size_bytes{mountpoint="/"} < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host filesystem free disk space is below 15%"
+          description: "Mountpoint {{ $labels.mountpoint }} has only {{ $value | printf \"%.2f\" }}% space remaining."
+
+      - alert: HostDiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} * 100) / node_filesystem_size_bytes{mountpoint="/"} < 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Host filesystem free disk space is below 5%"
+          description: "Mountpoint {{ $labels.mountpoint }} has only {{ $value | printf \"%.2f\" }}% space remaining."
+
+      - alert: ContainerHighMemory
+        expr: (container_memory_working_set_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 85
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} high memory usage"
+          description: "Container memory is above 85% of limit (current: {{ $value | printf \"%.2f\" }}%)."
+
+      - alert: ContainerHighCpu
+        expr: sum(rate(container_cpu_usage_seconds_total{name!=""}[5m])) by (name) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} high CPU utilization"
+          description: "Container CPU is above 90% for 5 minutes."

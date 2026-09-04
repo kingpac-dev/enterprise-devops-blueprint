@@ -1,0 +1,42 @@
+# ==============================================================================
+# Portainer GitOps Stack — Orders Application (DEV Environment)
+# Implements: adr/0010-portainer-gitops-deployment.md
+#             docs/05-ci-cd/deployment-repository-standard.md
+# ==============================================================================
+
+name: orders-workload-dev
+
+services:
+  orders-api:
+    image: ${HARBOR_URL:-harbor.devops.local}/${HARBOR_PROJECT:-apps}/orders-api:${ORDERS_API_VERSION:-latest-dev}
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__Default: "${DB_CONNECTION_STRING:-Host=dev-db;Database=orders;Username=orders_app;Password=devpass}"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-dev-insecure-key-for-local-testing-only-12345}"
+      Serilog__MinimumLevel__Default: Debug
+    ports:
+      - "8081:8080"
+    networks:
+      - dev-app-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  orders-worker:
+    image: ${HARBOR_URL:-harbor.devops.local}/${HARBOR_PROJECT:-apps}/orders-worker:${ORDERS_WORKER_VERSION:-latest-dev}
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__Default: "${DB_CONNECTION_STRING:-Host=dev-db;Database=orders;Username=orders_app;Password=devpass}"
+      WorkerOptions__PollingIntervalSeconds: "5"
+    networks:
+      - dev-app-net
+
+networks:
+  dev-app-net:
+    driver: bridge

@@ -14,6 +14,8 @@
 !.env.example
 
 secrets/
+certs/
+infra/certs/
 *.pem
 *.key
 *.pfx
@@ -22,6 +24,7 @@ secrets/
 *.keystore
 *.crt
 *.cer
+*.srl
 id_rsa
 id_rsa.*
 id_ed25519

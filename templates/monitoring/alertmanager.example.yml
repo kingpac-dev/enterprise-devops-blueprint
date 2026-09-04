@@ -1,0 +1,87 @@
+# ==============================================================================
+# Enterprise DevOps Blueprint — Alertmanager Configuration Template
+# Implements: docs/08-observability/alerting-standard.md
+#             adr/0006-use-prometheus-grafana-loki.md
+# ==============================================================================
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: "${SMTP_HOST:-mail.devops.local:587}"
+  smtp_from: "alertmanager@${PLATFORM_DOMAIN:-devops.local}"
+  smtp_auth_username: "${SMTP_USER:-alerts}"
+  smtp_auth_password: "${SMTP_PASSWORD:-ChangeMeSmtpPassword123!}"
+  smtp_require_tls: true
+
+# Root route with grouping and timing parameters
+route:
+  group_by: ['alertname', 'cluster', 'service', 'job']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'slack-warning'
+
+  routes:
+    # 1. Dead Man's Snitch (Inverted Heartbeat - must never stop firing)
+    - match:
+        severity: heartbeat
+      receiver: 'dead-mans-snitch'
+      group_wait: 0s
+      repeat_interval: 5m
+
+    # 2. Critical alerts (Service outage, disk exhaustion, data loss risk)
+    - match:
+        severity: critical
+      receiver: 'pager-critical'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # 3. Warning alerts (Degraded latency, high error rate, near capacity)
+    - match:
+        severity: warning
+      receiver: 'slack-warning'
+      group_wait: 30s
+      repeat_interval: 4h
+
+# Inhibit rules: suppress warning alerts when a critical alert for the same service is already active
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service', 'instance']
+
+receivers:
+  # Receiver for external heartbeat watcher (Uptime Kuma / Healthchecks.io)
+  - name: 'dead-mans-snitch'
+    webhook_configs:
+      - url: '${SNITCH_WEBHOOK_URL:-https://hc-ping.com/00000000-0000-0000-0000-000000000000}'
+        send_resolved: false
+
+  # Receiver for Critical on-call alerts (Webhook / PagerDuty)
+  - name: 'pager-critical'
+    webhook_configs:
+      - url: '${CRITICAL_WEBHOOK_URL:-https://webhook.devops.local/oncall-critical}'
+        send_resolved: true
+
+  # Receiver for Warnings (Slack channel)
+  - name: 'slack-warning'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL:-https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX}'
+        channel: '#devops-alerts'
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.alertname }} ({{ .GroupLabels.service }})'
+        text: >-
+          {{ range .Alerts }}
+            *Alert:* {{ .Annotations.summary }}
+            *Description:* {{ .Annotations.description }}
+            *Severity:* `{{ .Labels.severity }}`
+            *Details:*
+            {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
+            {{ end }}
+          {{ end }}
+
+  # Receiver for Microsoft Teams
+  - name: 'teams-warning'
+    webhook_configs:
+      - url: '${TEAMS_WEBHOOK_URL:-https://outlook.office.com/webhook/00000000-0000-0000-0000-000000000000}'
+        send_resolved: true

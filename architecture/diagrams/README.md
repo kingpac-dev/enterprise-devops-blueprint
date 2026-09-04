@@ -18,12 +18,12 @@ Platform, environment, network, pipeline, and deployment diagrams.
 
 | Diagram | Shows | Status |
 | --- | --- | --- |
-| [platform-overview.md](platform-overview.md) | End-to-end toolchain from developer to production, including control paths | Draft |
-| [environment-promotion.md](environment-promotion.md) | Artifact promotion across DEV, UAT, PROD with stop points and rollback paths | Draft |
-| `ci-pipeline` | CI stages and gate behaviour | Planned with [docs/05-ci-cd/](../../docs/05-ci-cd/) |
-| `cd-pipeline` | Deployment, approval, verification, and rollback flow | Planned with [docs/05-ci-cd/](../../docs/05-ci-cd/) |
-| `network-flows` | Required traffic between components | Planned with [docs/03-network/](../../docs/03-network/) |
-| `observability-flow` | Metric and log collection paths | Planned with [docs/08-observability/](../../docs/08-observability/) |
+| [platform-overview.md](platform-overview.md) | End-to-end toolchain from developer to production, including control paths | **Published** |
+| [environment-promotion.md](environment-promotion.md) | Artifact promotion across DEV, UAT, PROD with stop points and rollback paths | **Published** |
+| [ci-pipeline.md](ci-pipeline.md) | Standard CI stages, fail-fast gates, and Harbor image publishing | **Published** |
+| [cd-pipeline.md](cd-pipeline.md) | Deployment, approval, verification, and automated rollback flow | **Published** |
+| [network-flows.md](network-flows.md) | Required network traffic, firewall zones, and protocol ports | **Published** |
+| [observability-flow.md](observability-flow.md) | Metric scraping, log streaming, dashboards, and alerting telemetry paths | **Published** |
 
 Diagrams specific to one document are kept inline in that document rather than here. The architecture documents in [docs/01-architecture/](../../docs/01-architecture/) contain several such diagrams.
 

@@ -1,0 +1,17 @@
+configuration-as-code:1775.v810dc950b_514
+git:5.2.1
+workflow-aggregator:596.v8c21c963d92d
+pipeline-stage-view:2.34
+sonar:2.16.1
+docker-workflow:572.v950f58993843
+credentials-binding:681.vf91662a_32536
+timestamper:1.26
+ws-cleanup:0.45
+github:1.38.0
+github-branch-source:1783.v75f850d99598
+prometheus:2.2.0
+matrix-auth:3.2.2
+ansicolor:1.0.4
+bouncycastle-api:2.30.1.78.1-248.ve27176eb_589c
+ssh-slaves:2.944.v992383842c06
+plain-credentials:182.v468b_97b_9dcb_8

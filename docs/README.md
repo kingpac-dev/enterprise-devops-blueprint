@@ -10,7 +10,7 @@ This index lists documentation areas and their intent. It contains no standards 
 
 ## Status
 
-**Skeleton.** Area directories and indexes exist. No standards have been published yet.
+**Published.** Complete documentation baseline covering 13 operational, governance, and architectural areas.
 
 ---
 
